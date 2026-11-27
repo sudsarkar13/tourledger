@@ -20,6 +20,7 @@ import androidx.core.view.WindowInsetsCompat
 // Copied over the generated file by scripts/build.sh (the gen/ folder is not kept).
 class MainActivity : TauriActivity() {
   private var multicast: WifiManager.MulticastLock? = null
+  private var updater: Updater? = null
 
   // The page background colours from ui/src/styles/theme.css.
   private fun background(): Int {
@@ -69,6 +70,14 @@ class MainActivity : TauriActivity() {
     // A new web view is white until the page paints: a flash on a dark phone.
     webView.setBackgroundColor(background())
     webView.addJavascriptInterface(LocalNetwork(), "TourLedgerAndroid")
+    updater?.close()
+    updater = Updater(this).also { webView.addJavascriptInterface(it, "TourLedgerUpdates") }
+  }
+
+  override fun onDestroy() {
+    updater?.close()
+    updater = null
+    super.onDestroy()
   }
 
   /**

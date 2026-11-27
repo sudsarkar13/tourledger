@@ -1,6 +1,7 @@
 # Builds every platform, for a version tag or when started by hand. A tag also
-# collects the desktop installers into a draft pre-release. Ordinary pushes and
-# pull requests build nothing.
+# signs the desktop updates and collects them into a draft release; started by
+# hand, it does the same signing and checks without making a release. Ordinary
+# pushes and pull requests build nothing.
 name: build
 
 on:
@@ -20,13 +21,15 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@39008827e6b4319a349e9a42dfc90579dd25f1ca # stable
         with:
+          toolchain: stable
           components: clippy, rustfmt
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
       - run: cargo fmt --all --check
       - run: cargo clippy --all-targets -- -D warnings
       - run: cargo test
+      - run: node --test scripts/latest-json.test.mjs
 
   desktop:
     needs: test
@@ -38,7 +41,7 @@ jobs:
           - { name: linux-arm64, os: ubuntu-24.04-arm, args: "--bundles deb,rpm" }
           - { name: windows-x64, os: windows-latest, args: "--bundles nsis,msi" }
           - { name: windows-arm64, os: windows-11-arm, args: "--bundles nsis" }
-          - { name: macos-universal, os: macos-latest, args: "--bundles dmg --target universal-apple-darwin", targets: "aarch64-apple-darwin,x86_64-apple-darwin" }
+          - { name: macos-universal, os: macos-latest, args: "--bundles app,dmg --target universal-apple-darwin", targets: "aarch64-apple-darwin,x86_64-apple-darwin" }
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -46,7 +49,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev patchelf rpm
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
         with:
           version: 11
       - uses: actions/setup-node@v4
@@ -54,16 +57,23 @@ jobs:
           node-version: 24
           cache: pnpm
           cache-dependency-path: ui/pnpm-lock.yaml
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@39008827e6b4319a349e9a42dfc90579dd25f1ca # stable
         with:
+          toolchain: stable
           targets: ${{ matrix.targets }}
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
       - run: pnpm install --frozen-lockfile
         working-directory: ui
       - run: pnpm test
         working-directory: ui
-      - run: ui/node_modules/.bin/tauri build ${{ matrix.args }}
-        shell: bash
+      # The bundler needs a key to produce the update files, so it is given one
+      # made here and thrown away. The real key never reaches the machines that
+      # compile third-party code: the release job signs the files again.
+      - shell: bash
+        run: |
+          ui/node_modules/.bin/tauri signer generate --ci -p "" -w "$RUNNER_TEMP/throwaway.key" > /dev/null
+          TAURI_SIGNING_PRIVATE_KEY="$(cat "$RUNNER_TEMP/throwaway.key")" TAURI_SIGNING_PRIVATE_KEY_PASSWORD="" \
+            ui/node_modules/.bin/tauri build ${{ matrix.args }} --config src-tauri/tauri.updater.conf.json
       - uses: actions/upload-artifact@v4
         with:
           name: tourledger-${{ matrix.name }}
@@ -74,12 +84,15 @@ jobs:
             target/**/release/bundle/nsis/*.exe
             target/**/release/bundle/msi/*.msi
             target/**/release/bundle/dmg/*.dmg
+            target/**/release/bundle/macos/*.app.tar.gz
           if-no-files-found: error
 
   # A draft: the signed Android APK is added from the owner's machine, and a
-  # person publishes it. Notes come from docs/releases/<tag>.md.
+  # person publishes it. Notes come from docs/releases/v<version>.md. Installed
+  # apps are offered it once it is published as the latest release (not a
+  # pre-release).
   release:
-    if: startsWith(github.ref, 'refs/tags/v')
+    if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
     needs: desktop
     runs-on: ubuntu-24.04
     permissions:
@@ -90,20 +103,51 @@ jobs:
         with:
           pattern: tourledger-{linux,windows,macos}-*
           path: installers
-      - env:
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
+        with:
+          version: 11
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      # Only the signing tool is needed, and no package may run code here.
+      - run: pnpm --dir ui install --frozen-lockfile --ignore-scripts
+      - run: echo "VERSION=$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -1)" >> "$GITHUB_ENV"
+      - if: startsWith(github.ref, 'refs/tags/v')
+        run: test "$GITHUB_REF_NAME" = "v$VERSION" || { echo "::error::tag and version differ"; exit 1; }
+      - name: Sign the update files
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: |
+          find installers -type f \( -name '*.app.tar.gz' -o -name '*-setup.exe' -o -name '*.msi' \
+              -o -name '*.AppImage' -o -name '*.deb' -o -name '*.rpm' \) -print0 |
+            while IFS= read -r -d '' file; do
+              rm -f "$file.sig"
+              ui/node_modules/.bin/tauri signer sign --app-version "$VERSION" "$file" > /dev/null
+            done
+      # Fails if a system is missing, or a signature is not from the key the apps
+      # trust, or names another version.
+      - run: node scripts/latest-json.mjs installers "v$VERSION" "docs/releases/v$VERSION.md"
+      - if: github.event_name == 'workflow_dispatch'
+        uses: actions/upload-artifact@v4
+        with:
+          name: latest-json
+          path: latest.json
+      - if: startsWith(github.ref, 'refs/tags/v')
+        env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "$GITHUB_REF_NAME" --verify-tag --draft --prerelease \
-            --title "TourLedger ${GITHUB_REF_NAME#v} (early test)" \
-            --notes-file "docs/releases/$GITHUB_REF_NAME.md"
-          find installers -type f -print0 | xargs -0 gh release upload "$GITHUB_REF_NAME"
+          gh release create "$GITHUB_REF_NAME" --verify-tag --draft \
+            --title "TourLedger $VERSION" --notes-file "docs/releases/$GITHUB_REF_NAME.md"
+          # Signatures are inside latest.json, so the .sig files are not attached.
+          find installers -type f ! -name '*.sig' -print0 | xargs -0 gh release upload "$GITHUB_REF_NAME" latest.json
 
   android:
     needs: test
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
         with:
           version: 11
       - uses: actions/setup-node@v4
@@ -115,10 +159,11 @@ jobs:
         with:
           distribution: temurin
           java-version: 17
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@39008827e6b4319a349e9a42dfc90579dd25f1ca # stable
         with:
+          toolchain: stable
           targets: aarch64-linux-android,armv7-linux-androideabi,i686-linux-android,x86_64-linux-android
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
       - run: echo "NDK_HOME=$ANDROID_NDK_LATEST_HOME" >> "$GITHUB_ENV"
       # A debug APK is signed with a throwaway key: installable for testing,
       # not for distribution.
@@ -134,7 +179,7 @@ jobs:
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
         with:
           version: 11
       - uses: actions/setup-node@v4
@@ -142,10 +187,11 @@ jobs:
           node-version: 24
           cache: pnpm
           cache-dependency-path: ui/pnpm-lock.yaml
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@39008827e6b4319a349e9a42dfc90579dd25f1ca # stable
         with:
+          toolchain: stable
           targets: aarch64-apple-ios-sim
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
       # Simulator only. A phone build needs an Apple developer account.
       - run: scripts/build.sh ios
 
@@ -157,7 +203,7 @@ jobs:
     continue-on-error: true
     steps:
       - uses: actions/checkout@v4
-      - uses: vmactions/freebsd-vm@v1
+      - uses: vmactions/freebsd-vm@811efaaac0668df8bfb8308c3ec997b5ab50037b # v1
         with:
           usesh: true
           prepare: pkg install -y rust node npm webkit2-gtk_41 librsvg2-rust gmake pkgconf

@@ -10,12 +10,14 @@ import { categoryName, PURPOSES } from "../labels";
 import { ClaimBadge } from "../components/shared";
 import { usePreferences } from "../preferences";
 import { useApp } from "../state";
+import { useUpdate } from "../updates";
 import type { ExportedFile, Person, QuickEntry, Transfer } from "../types";
 
 const back = { href: "#/more", label: "More" };
 
 export function More() {
   const { data, sync } = useApp();
+  const updating = useUpdate();
   const current = data.companies.find((c) => c.id === data.profile.company_id);
   const steps = [
     { done: !!data.profile.name, title: "Add your details", href: "#/more/profile" },
@@ -52,6 +54,20 @@ export function More() {
           <ListRow icon={RefreshCw} title="Sync" detail={sync?.enabled ? `On · ${sync.peers.length} linked` : "Off"} href="#/more/sync" />
           <ListRow icon={Database} title="Backup and import" href="#/more/data" />
           <ListRow icon={Settings} title="Appearance" href="#/more/appearance" />
+          {updating && (
+            <ListRow
+              icon={Download}
+              title="Updates"
+              detail={
+                updating.phase === "ready"
+                  ? `${updating.version} ready to install`
+                  : updating.phase === "available"
+                    ? `${updating.version} is out`
+                    : `Version ${updating.current}`
+              }
+              href="#/more/updates"
+            />
+          )}
         </List>
       </Card>
     </>

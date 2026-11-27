@@ -8,10 +8,12 @@ export interface Preferences {
   company: string;
   /** Claim reports list every entry, not just totals by category. */
   reportDetail: boolean;
+  /** Look for a newer version and download it. */
+  checkUpdates: boolean;
 }
 
 const KEY = "tourledger.preferences";
-const defaults: Preferences = { theme: "system", reduced: false, company: "", reportDetail: false };
+const defaults: Preferences = { theme: "system", reduced: false, company: "", reportDetail: false, checkUpdates: true };
 
 function load(): Preferences {
   try {
@@ -23,6 +25,9 @@ function load(): Preferences {
 
 let current = load();
 const listeners = new Set<() => void>();
+
+/** For code outside the page, which cannot use the hook. */
+export const currentPreferences = () => current;
 
 export function applyPreferences() {
   const root = document.documentElement;

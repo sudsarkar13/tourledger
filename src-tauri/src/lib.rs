@@ -1,6 +1,8 @@
 //! The native shell: opens the ledger, passes the UI's requests to Rust and
 //! saves exported files where the person chooses. No rules live here.
 
+mod updates;
+
 use std::io::Write;
 use std::sync::Arc;
 
@@ -116,6 +118,11 @@ pub fn run() {
     #[cfg(mobile)]
     let builder = builder.plugin(tauri_plugin_barcode_scanner::init());
 
+    #[cfg(any(target_os = "macos", windows, target_os = "linux"))]
+    let builder = builder
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        .manage(updates::Updates::default());
+
     builder
         .setup(|app| {
             let ledger = open_ledger(app.handle());
@@ -126,7 +133,14 @@ pub fn run() {
             app.manage(Ledger(ledger));
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![api, save_file])
+        .invoke_handler(tauri::generate_handler![
+            api,
+            save_file,
+            updates::update_status,
+            updates::update_check,
+            updates::update_download,
+            updates::update_install
+        ])
         .run(tauri::generate_context!())
         .expect("TourLedger could not start");
 }

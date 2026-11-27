@@ -102,6 +102,28 @@ both draw those marks.
   first used) and a multicast lock, held while the app is in front; macOS shows
   its own local network prompt. Without them sync still works over the internet.
 
+## Updating
+
+The program is replaced; the data folder is never part of it. The page only starts
+steps and shows progress (`ui/src/updates.ts`); where updates come from is fixed in
+native code and configuration, so the page cannot redirect it.
+
+- **macOS, Windows, Linux** (`src-tauri/src/updates.rs`): Tauri's updater reads
+  `latest.json` from the latest GitHub release and installs only a file signed with
+  the update key, whose signature also names the version, so an old release cannot be
+  offered as a new one.
+- **Android** (`src-tauri/android/Updater.kt`): reads the latest release from GitHub,
+  downloads the APK, checks its size and SHA-256, and hands it to Android's package
+  installer for this package only. Android itself refuses an APK signed with another
+  key or with a lower version.
+- **When:** shortly after opening and daily while open, unless switched off. It
+  downloads by itself except on a metered connection, and installs only when asked.
+- Anyone who controls the GitHub account can publish an update. Keep two-factor
+  sign-in on it.
+
+A change to the stored or synced format must stay readable by the previous version:
+linked devices update at different times.
+
 ## Money
 
 Integer minor units (paise) everywhere. No floating point in sums. A foreign

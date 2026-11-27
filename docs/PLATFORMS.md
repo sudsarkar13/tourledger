@@ -16,9 +16,24 @@ CI runs for version tags and when started by hand.
 
 ## Releasing
 
-A tag `v…` builds the desktop installers into a draft pre-release, with notes from
+A tag `v…` builds the desktop installers, signs them with the update key, writes
+`latest.json` and collects everything into a draft release, with notes from
 `docs/releases/<tag>.md`. The Android APK is built and signed on the owner's machine
-with their own key, then added to the draft.
+with their own key, then added to the draft. Publishing it as the latest release (not
+a pre-release) is what offers it to installed apps.
+
+1. Set the version in `Cargo.toml`, `src-tauri/tauri.conf.json` and `ui/package.json`,
+   and write the notes. Commit, tag `v…` and push the tag.
+2. `scripts/build.sh android-release --target aarch64 armv7`, then
+   `scripts/sign-android.sh`.
+3. Attach the APK to the draft **before publishing**, or Android users are told there
+   is nothing new.
+4. `gh release edit v… --draft=false --latest`
+
+Two keys, both outside the repository in `~/.tourledger`, both needing a backup:
+`release.keystore` signs the APK, `updater.key` signs desktop updates (a copy is held
+as a GitHub secret). Losing either means installed copies of that kind can never be
+updated again. The updater key was set up with `scripts/setup-update-key.sh`.
 
 | System | Still missing |
 |---|---|

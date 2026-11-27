@@ -68,7 +68,10 @@ case "${1:-desktop}" in
     fi
     # Sync on the same Wi-Fi: Android 17 asks before an app may use the local
     # network, and multicast (how devices find each other) needs its own entry.
-    for permission in ACCESS_LOCAL_NETWORK CHANGE_WIFI_MULTICAST_STATE; do
+    # Updates: asking to install, installing itself without asking again, and
+    # knowing whether the connection is metered.
+    for permission in ACCESS_LOCAL_NETWORK CHANGE_WIFI_MULTICAST_STATE \
+      REQUEST_INSTALL_PACKAGES UPDATE_PACKAGES_WITHOUT_USER_ACTION ACCESS_NETWORK_STATE; do
       if ! grep -q "android.permission.$permission" "$manifest"; then
         sed -i.bak "s|<uses-permission android:name=\"android.permission.INTERNET\" />|&\\
     <uses-permission android:name=\"android.permission.$permission\" />|" "$manifest" && rm "$manifest.bak"
@@ -77,7 +80,8 @@ case "${1:-desktop}" in
     done
     # Keeps the page clear of the system bars and the keyboard, and asks for
     # local network access when the page needs it.
-    cp src-tauri/android/MainActivity.kt src-tauri/gen/android/app/src/main/java/app/tourledger/MainActivity.kt
+    cp src-tauri/android/MainActivity.kt src-tauri/android/Updater.kt \
+      src-tauri/gen/android/app/src/main/java/app/tourledger/
     # What the release build's code shrinker must not remove.
     cp src-tauri/android/proguard-tourledger.pro src-tauri/gen/android/app/
     # Extra arguments go to Tauri, for example: --target aarch64
@@ -92,7 +96,9 @@ case "${1:-desktop}" in
       "$tauri" android build --apk "${@:2}"
       # Check rather than trust: refuse an APK that still names the home folder.
       apk=src-tauri/gen/android/app/build/outputs/apk/universal/release/app-universal-release-unsigned.apk
-      if unzip -p "$apk" 'lib/*' 'classes*.dex' | grep -qaF "$HOME"; then
+      # grep reads to the end (-c, not -q): stopping early would kill unzip, and
+      # under pipefail that reads as "not found".
+      if [ "$(unzip -p "$apk" 'lib/*' 'classes*.dex' | grep -caF "$HOME")" != 0 ]; then
         echo "The APK still contains $HOME. Do not publish it." >&2
         exit 1
       fi

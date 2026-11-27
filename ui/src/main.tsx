@@ -15,9 +15,11 @@ import { Appearance, Companies, CompanyPage, DataPage, More, People, ProfilePage
 import { Sync } from "./pages/Sync";
 import { TourDetail } from "./pages/TourDetail";
 import { Tours } from "./pages/Tours";
+import { UpdatePrompt, Updates } from "./pages/Updates";
 import { applyPreferences } from "./preferences";
 import { useRoute } from "./router";
 import { AppProvider } from "./state";
+import { startUpdates } from "./updates";
 import "./styles/theme.css";
 import "./styles/app.css";
 
@@ -58,6 +60,8 @@ function Page({ section, id, extra }: { section: string; id?: string; extra?: st
           return <DataPage />;
         case "appearance":
           return <Appearance />;
+        case "updates":
+          return <Updates />;
         default:
           return <More />;
       }
@@ -98,12 +102,14 @@ function Shell() {
         <Page section={section} id={id} extra={extra} />
       </main>
       <Overlays />
+      <UpdatePrompt />
     </div>
   );
 }
 
 applyPreferences();
 listenForBack();
+startUpdates();
 createRoot(document.getElementById("root")!).render(
   <AppProvider>
     <Shell />

@@ -39,6 +39,12 @@ EmptyState · ListRow · Toast · Confirm · MonthBars · CategoryBars · Meter
 
 A page never styles its own button, input or dialog.
 
+## Updating
+
+More → Updates holds the version, the state in one line, one primary button for the
+next step, and the switch for automatic checks. A ready update asks once per version
+in a `Sheet`, never over an open form or while something is being typed.
+
 ## Behaviour
 
 - Easy entry: a text box takes one expense per line, shows what it understood, and
