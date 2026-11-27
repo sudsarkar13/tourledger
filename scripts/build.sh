@@ -84,8 +84,18 @@ case "${1:-desktop}" in
     if [ "$1" = android ]; then
       "$tauri" android build --debug --apk "${@:2}"
     else
+      # This APK is published, so keep this machine's folders (and with them the
+      # user name) out of the compiled code. For rustc the last match wins.
+      export RUSTFLAGS="${RUSTFLAGS:-} --remap-path-prefix=$HOME=home --remap-path-prefix=$HOME/.cargo=cargo --remap-path-prefix=$PWD=tourledger"
+      export CFLAGS="${CFLAGS:-} -ffile-prefix-map=$HOME=home -ffile-prefix-map=$HOME/.cargo=cargo -ffile-prefix-map=$PWD=tourledger"
       # Unsigned; scripts/sign-android.sh signs it with your key.
       "$tauri" android build --apk "${@:2}"
+      # Check rather than trust: refuse an APK that still names the home folder.
+      apk=src-tauri/gen/android/app/build/outputs/apk/universal/release/app-universal-release-unsigned.apk
+      if unzip -p "$apk" 'lib/*' 'classes*.dex' | grep -qaF "$HOME"; then
+        echo "The APK still contains $HOME. Do not publish it." >&2
+        exit 1
+      fi
     fi
     ;;
   ios)
