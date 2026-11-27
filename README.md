@@ -95,8 +95,11 @@ scripts/build.sh
 
 builds for the desktop system you run it on. `scripts/build.sh android` and
 `scripts/build.sh ios` need the Android SDK/NDK or full Xcode. CI
-(`.github/workflows/build.yml`) covers macOS, Windows, Linux, Android, iOS and an
-experimental FreeBSD job once the project is on GitHub.
+(`.github/workflows/build.yml`) covers macOS, Windows, Linux, Android, the iOS
+simulator and an experimental FreeBSD job. It runs for version tags and when started
+by hand.
+
+Downloads are on the [releases page](https://github.com/sudsarkar13/tourledger/releases).
 
 The Android test APK lands in
 `src-tauri/gen/android/app/build/outputs/apk/universal/debug/`.

@@ -5,27 +5,26 @@ One codebase. What has actually been done for each system, as of 27 November 202
 | System | How it is built | Built so far? | Run and tested? |
 |---|---|---|---|
 | macOS (Apple silicon) | `scripts/build.sh` | Yes, ad-hoc signed | Installed and opened. Navigation and Save PDF checked inside the app; other screens in a browser against the same Rust code |
-| macOS (Intel, universal) | CI | No | No |
-| Windows x64, arm64 | CI, or `scripts/build.sh` on Windows | No (core compiles for Windows) | No |
-| Linux x64, arm64 (deb, rpm, AppImage) | CI, or `scripts/build.sh` on Linux | No (core compiles for Linux) | No |
-| Android (64-bit) | `scripts/build.sh android`, or CI | Yes, debug test APK | On an Android 16 emulator: launch, saving, camera, preview, Save PDF, back button. Not on a real phone; sync and QR scanning not tried |
-| iOS, iPadOS | `scripts/build.sh ios` (simulator), or CI | No (core compiles for iOS) | No |
-| FreeBSD | CI (experimental) | No (core compiles for FreeBSD) | No |
+| macOS (Intel, universal) | CI | Yes | No |
+| Windows x64, arm64 | CI, or `scripts/build.sh` on Windows | Yes, in CI | No; the core tests pass on x64 |
+| Linux x64, arm64 (deb, rpm, AppImage) | CI, or `scripts/build.sh` on Linux | Yes, in CI | No; the core tests pass on x64 |
+| Android (ARM, 64 and 32-bit) | `scripts/build.sh android-release`, then `scripts/sign-android.sh` | Yes, signed release APK | A release build on an Android 16 emulator: launch, preview, backup and restore, QR scanner opening. Not on a real phone; sync and reading a code not tried |
+| iOS, iPadOS | `scripts/build.sh ios` (simulator), or CI | Simulator build only, in CI | No |
+| FreeBSD | CI (experimental) | Compiles in CI | No |
 
-"Core compiles" means `cargo check -p tourledger-core --target …` passed: storage,
-money, claims, loans and the PDF. For Windows, Linux, iOS and FreeBSD it was run
-before bill pictures were added. It says nothing about networking or the window,
-which need each system's own tools.
+CI runs for version tags and when started by hand.
 
-## What is needed before release
+## Releasing
 
-| System | Needed |
+A tag `v…` builds the desktop installers into a draft pre-release, with notes from
+`docs/releases/<tag>.md`. The Android APK is built and signed on the owner's machine
+with their own key, then added to the draft.
+
+| System | Still missing |
 |---|---|
-| All CI builds | The project pushed to a GitHub account of your choice |
-| Android release | A signing key you create and keep; the current APK is a large debug build |
-| iOS | Full Xcode; an Apple Developer account for real devices and the App Store |
-| macOS | An Apple Developer ID to sign and notarise, or users see a warning |
-| Windows | A code-signing certificate, or users see a warning |
+| iOS | An Apple Developer account for real devices and the App Store |
+| macOS | An Apple Developer ID to sign and notarise, so users see a warning |
+| Windows | A code-signing certificate, so users see a warning |
 
 iOS also needs Apple's multicast networking entitlement before devices can find
 each other on Wi-Fi; until then it would sync over the internet only.
