@@ -28,8 +28,9 @@ if [ ! -f "$key" ]; then
 fi
 
 mkdir -p dist
-aligned=$(mktemp -t tourledger-aligned).apk
-trap 'rm -f "$aligned"' EXIT
+work=$(mktemp -d)
+trap 'rm -rf "$work"' EXIT
+aligned="$work/aligned.apk"
 "$tools/zipalign" -f -P 16 4 "$unsigned" "$aligned"
 echo "Signing: enter the key's password."
 "$tools/apksigner" sign --ks "$key" --ks-key-alias tourledger --out "$out" "$aligned"
