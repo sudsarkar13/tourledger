@@ -93,7 +93,8 @@ function Shell() {
           </a>
         ))}
       </nav>
-      <main key={shown.place} className={shown.motion}>
+      {/* An attribute, not a class: "back" is also the style of the back link. */}
+      <main key={shown.place} data-motion={shown.motion}>
         <Page section={section} id={id} extra={extra} />
       </main>
       <Overlays />

@@ -150,11 +150,11 @@ main > * {
   animation: page-up var(--page) var(--ease) backwards;
 }
 
-main.forward > * {
+main[data-motion="forward"] > * {
   animation-name: page-forward;
 }
 
-main.back > * {
+main[data-motion="back"] > * {
   animation-name: page-back;
 }
 
