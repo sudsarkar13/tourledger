@@ -93,6 +93,14 @@ case "${1:-desktop}" in
     # The generated Xcode phase runs "node tauri" from gen/apple, which only
     # works for a project with the CLI at its root. Send it to the one in ui/.
     echo 'require("../../../ui/node_modules/@tauri-apps/cli/tauri.js")' > src-tauri/gen/apple/tauri.js
+    # The sync library reads the network settings through two system libraries
+    # that the generated project does not link.
+    spec=src-tauri/gen/apple/project.yml
+    if ! grep -q 'libresolv.tbd' "$spec"; then
+      perl -pi -e 's/^(\s*)- sdk: Security\.framework\n/$&$1- sdk: SystemConfiguration.framework\n$1- sdk: libresolv.tbd\n/' "$spec"
+      grep -q 'libresolv.tbd' "$spec" || { echo "Could not add the network libraries to the Xcode project." >&2; exit 1; }
+      (cd src-tauri/gen/apple && xcodegen generate)
+    fi
     "$tauri" ios build --debug --target aarch64-sim
     ;;
   *)
