@@ -78,6 +78,8 @@ case "${1:-desktop}" in
     # Keeps the page clear of the system bars and the keyboard, and asks for
     # local network access when the page needs it.
     cp src-tauri/android/MainActivity.kt src-tauri/gen/android/app/src/main/java/app/tourledger/MainActivity.kt
+    # What the release build's code shrinker must not remove.
+    cp src-tauri/android/proguard-tourledger.pro src-tauri/gen/android/app/
     # Extra arguments go to Tauri, for example: --target aarch64
     if [ "$1" = android ]; then
       "$tauri" android build --debug --apk "${@:2}"
@@ -88,6 +90,9 @@ case "${1:-desktop}" in
     ;;
   ios)
     [ -d src-tauri/gen/apple ] || "$tauri" ios init --ci
+    # The generated Xcode phase runs "node tauri" from gen/apple, which only
+    # works for a project with the CLI at its root. Send it to the one in ui/.
+    echo 'require("../../../ui/node_modules/@tauri-apps/cli/tauri.js")' > src-tauri/gen/apple/tauri.js
     "$tauri" ios build --debug --target aarch64-sim
     ;;
   *)

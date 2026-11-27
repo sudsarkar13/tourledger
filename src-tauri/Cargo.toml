@@ -26,5 +26,5 @@ data-encoding = "2"
 [target.'cfg(any(target_os = "android", target_os = "ios"))'.dependencies]
 tauri-plugin-barcode-scanner = "2"
 
-[target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
+[target.'cfg(not(any(target_os = "android", target_os = "ios", target_os = "freebsd")))'.dependencies]
 tauri-plugin-single-instance = "2"

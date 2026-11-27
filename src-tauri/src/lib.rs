@@ -100,8 +100,8 @@ pub fn run() {
     let builder = tauri::Builder::default();
 
     // A second launch brings the first window forward; the ledger allows one
-    // process only. Must be the first plugin.
-    #[cfg(desktop)]
+    // process only. Must be the first plugin. The plugin has no FreeBSD version.
+    #[cfg(all(desktop, not(target_os = "freebsd")))]
     let builder = builder.plugin(tauri_plugin_single_instance::init(|app, _, _| {
         if let Some(window) = app.get_webview_window("main") {
             let _ = window.unminimize();
