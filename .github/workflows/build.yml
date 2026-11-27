@@ -1,11 +1,11 @@
-# Builds every platform. Runs only once the project is pushed to GitHub.
+# Builds every platform, for a version tag or when started by hand. A tag also
+# collects the desktop installers into a draft pre-release. Ordinary pushes and
+# pull requests build nothing.
 name: build
 
 on:
   push:
-    branches: [main]
     tags: ["v*"]
-  pull_request:
   workflow_dispatch:
 
 permissions:
@@ -75,6 +75,28 @@ jobs:
             target/**/release/bundle/msi/*.msi
             target/**/release/bundle/dmg/*.dmg
           if-no-files-found: error
+
+  # A draft: the signed Android APK is added from the owner's machine, and a
+  # person publishes it. Notes come from docs/releases/<tag>.md.
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: desktop
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: tourledger-{linux,windows,macos}-*
+          path: installers
+      - env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" --verify-tag --draft --prerelease \
+            --title "TourLedger ${GITHUB_REF_NAME#v} (early test)" \
+            --notes-file "docs/releases/$GITHUB_REF_NAME.md"
+          find installers -type f -print0 | xargs -0 gh release upload "$GITHUB_REF_NAME"
 
   android:
     needs: test

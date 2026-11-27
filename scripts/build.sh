@@ -4,6 +4,8 @@
 #   scripts/build.sh            the desktop system this is run on
 #   scripts/build.sh android    APK for testing (needs the Android SDK and NDK)
 #   scripts/build.sh android --target aarch64    only for 64-bit phones, faster
+#   scripts/build.sh android-release --target aarch64 armv7    for publishing;
+#                               then sign it with scripts/sign-android.sh
 #   scripts/build.sh ios        simulator build (needs macOS with full Xcode)
 #
 # Windows, Linux and FreeBSD builds run on those systems or in CI
@@ -36,7 +38,7 @@ case "${1:-desktop}" in
       *) echo "No build recipe for $(uname -s)." >&2; exit 1 ;;
     esac
     ;;
-  android)
+  android | android-release)
     : "${ANDROID_HOME:?Set ANDROID_HOME to the Android SDK folder}"
     # The newest installed NDK, unless one is already chosen.
     NDK_HOME="${NDK_HOME:-$ANDROID_HOME/ndk/$(ls "$ANDROID_HOME/ndk" | sort -V | tail -1)}"
@@ -77,14 +79,19 @@ case "${1:-desktop}" in
     # local network access when the page needs it.
     cp src-tauri/android/MainActivity.kt src-tauri/gen/android/app/src/main/java/app/tourledger/MainActivity.kt
     # Extra arguments go to Tauri, for example: --target aarch64
-    "$tauri" android build --debug --apk "${@:2}"
+    if [ "$1" = android ]; then
+      "$tauri" android build --debug --apk "${@:2}"
+    else
+      # Unsigned; scripts/sign-android.sh signs it with your key.
+      "$tauri" android build --apk "${@:2}"
+    fi
     ;;
   ios)
     [ -d src-tauri/gen/apple ] || "$tauri" ios init --ci
     "$tauri" ios build --debug --target aarch64-sim
     ;;
   *)
-    echo "Usage: scripts/build.sh [desktop|android|ios]" >&2
+    echo "Usage: scripts/build.sh [desktop|android|android-release|ios]" >&2
     exit 1
     ;;
 esac
