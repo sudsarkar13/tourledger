@@ -55,7 +55,7 @@ const MONTHS: [&str; 12] = [
     "jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec",
 ];
 
-const CATEGORY_WORDS: [(&str, &str); 11] = [
+const CATEGORY_WORDS: [(&str, &str); 12] = [
     (
         "food",
         "breakfast lunch dinner food meal meals thali tiffin snacks snack refreshment refreshments nashta khana tea chai coffee milk lassi juice shake water pani drink drinks restaurant dhaba canteen pantry biscuit biscuits samosa kachori pakora pakoda vada poha upma idli dosa uttapam paratha roti chapati puri rice dal biryani pulao noodles maggi momo momos sandwich burger pizza omelette egg chicken fish paneer roll fruit fruits banana apple chips namkeen sweets mithai mishti icecream kulfi soda cake bun toast cutlet",
@@ -70,8 +70,9 @@ const CATEGORY_WORDS: [(&str, &str); 11] = [
     ("bus", "bus volvo"),
     (
         "local",
-        "cab taxi auto uber ola rapido metro rickshaw toto erickshaw e-rickshaw bike ferry tram coolie porter",
+        "cab taxi auto uber ola rapido rickshaw toto erickshaw e-rickshaw bike ferry tram coolie porter",
     ),
+    ("metro", "metro"),
     (
         "event",
         "entry pass passes stall registration exhibition fair conference",
@@ -91,7 +92,6 @@ const MODES: [(&str, &str); 14] = [
     ("uber", "Cab"),
     ("ola", "Cab"),
     ("rapido", "Bike taxi"),
-    ("metro", "Metro"),
     ("rickshaw", "Rickshaw"),
     ("e-rickshaw", "E-rickshaw"),
     ("erickshaw", "E-rickshaw"),
@@ -99,9 +99,11 @@ const MODES: [(&str, &str); 14] = [
     ("bus", "Bus"),
     ("train", "Train"),
     ("flight", "Flight"),
+    // Last: "cab to metro" is a cab ride to the station.
+    ("metro", "Metro"),
 ];
 
-const TRANSPORT: [&str; 5] = ["local", "train", "flight", "bus", "fuel"];
+const TRANSPORT: [&str; 6] = ["local", "metro", "train", "flight", "bus", "fuel"];
 
 #[derive(Clone)]
 struct Word {
@@ -485,13 +487,30 @@ pub fn categorise(text: &str) -> Option<&'static str> {
         .map(|w| w.low.replace("ice-cream", "icecream"))
         .collect();
     let has = |word: &str| low.iter().any(|w| w == word);
-    let ride = MODES
-        .iter()
-        .any(|(m, name)| has(m) && !["Train", "Flight", "Bus"].contains(name));
-    if ride && has("to") {
-        return Some("local");
+    if has("to")
+        && let Some(category) = ride_category(mode_among(&low))
+    {
+        return Some(category);
     }
     category_among(low.iter().map(String::as_str))
+}
+
+/// The vehicle a line names, preferring anything over the metro.
+fn mode_among(words: &[String]) -> &'static str {
+    MODES
+        .iter()
+        .find(|(word, _)| words.iter().any(|w| w == word))
+        .map_or("", |(_, name)| name)
+}
+
+/// The category of a trip from one place to another by this vehicle. Trains,
+/// flights and buses are judged by their own words.
+fn ride_category(mode: &str) -> Option<&'static str> {
+    match mode {
+        "" | "Train" | "Flight" | "Bus" => None,
+        "Metro" => Some("metro"),
+        _ => Some("local"),
+    }
 }
 
 /// A name that paid but is not saved. Reading it as "me" would claim money
@@ -805,16 +824,10 @@ pub fn parse_line(line: &str, context: &Context) -> Draft {
         .filter(|x| !x.used)
         .map(|x| x.low.clone())
         .collect();
-    let mode = MODES
-        .iter()
-        .find(|(word, _)| free.iter().any(|f| f == word))
-        .map_or("", |(_, name)| name);
-    let riding = !mode.is_empty() && free.iter().any(|f| f == "to");
-    let category = if riding && !["Train", "Flight", "Bus"].contains(&mode) {
-        "local"
-    } else {
-        category_among(free.iter().map(String::as_str)).unwrap_or("other")
-    };
+    let mode = mode_among(&free);
+    let category = ride_category(mode)
+        .filter(|_| free.iter().any(|f| f == "to"))
+        .unwrap_or_else(|| category_among(free.iter().map(String::as_str)).unwrap_or("other"));
     let transport = TRANSPORT.contains(&category);
     let (from, to) = if transport || category == "other" {
         find_route(&mut w)
@@ -926,6 +939,24 @@ mod tests {
                 people: &people,
             },
         )
+    }
+
+    #[test]
+    fn a_typed_metro_ride_is_metro_and_a_ride_to_the_metro_is_not() {
+        for (line, category, mode) in [
+            ("metro home to station 40", "metro", "Metro"),
+            ("metro 60", "metro", "Metro"),
+            ("cab home to metro 120", "local", "Cab"),
+            ("auto to metro station 80", "local", "Auto"),
+            ("rickshaw home to metro 20", "local", "Rickshaw"),
+        ] {
+            let d = read(line);
+            assert_eq!(
+                (d.category.as_str(), d.mode.as_str()),
+                (category, mode),
+                "{line}"
+            );
+        }
     }
 
     #[test]
@@ -1085,6 +1116,12 @@ mod tests {
         assert_eq!(categorise("Powder tea inside train"), Some("food"));
         assert_eq!(categorise("auto home to station"), Some("local"));
         assert_eq!(categorise("coolie"), Some("local"));
+        assert_eq!(categorise("metro"), Some("metro"));
+        assert_eq!(categorise("metro home to station"), Some("metro"));
+        // The metro as the destination of another ride.
+        assert_eq!(categorise("cab to metro"), Some("local"));
+        assert_eq!(categorise("auto home to metro station"), Some("local"));
+        assert_eq!(categorise("cab metro station"), Some("local"));
         assert_eq!(categorise("newspaper"), None);
     }
 

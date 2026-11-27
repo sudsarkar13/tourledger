@@ -6268,7 +6268,7 @@ checksum = "009dbb7700f11c55ef83aebbe4c0e9cf1f1ac0844bd8d6f00dc38f302026e13a"
 
 [[package]]
 name = "tourledger"
-version = "0.1.2"
+version = "0.1.3"
 dependencies = [
  "data-encoding",
  "gethostname",
@@ -6287,7 +6287,7 @@ dependencies = [
 
 [[package]]
 name = "tourledger-core"
-version = "0.1.2"
+version = "0.1.3"
 dependencies = [
  "chrono",
  "crc32fast",
@@ -6306,7 +6306,7 @@ dependencies = [
 
 [[package]]
 name = "tourledger-devbridge"
-version = "0.1.2"
+version = "0.1.3"
 dependencies = [
  "serde_json",
  "tiny_http",
@@ -6317,7 +6317,7 @@ dependencies = [
 
 [[package]]
 name = "tourledger-sync"
-version = "0.1.2"
+version = "0.1.3"
 dependencies = [
  "chrono",
  "data-encoding",

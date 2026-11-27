@@ -43,9 +43,9 @@ pub const MAX_BILLS_PER_EXPENSE: usize = 10;
 /// The id that stands for the owner of the app in splits and payers.
 pub const ME: &str = "me";
 
-pub const CATEGORIES: [&str; 12] = [
-    "local", "train", "flight", "bus", "food", "lodging", "event", "fuel", "phone", "shopping",
-    "medical", "other",
+pub const CATEGORIES: [&str; 13] = [
+    "local", "metro", "train", "flight", "bus", "food", "lodging", "event", "fuel", "phone",
+    "shopping", "medical", "other",
 ];
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -336,8 +336,13 @@ fn not_negative(field: &'static str, value: i64) -> Result<()> {
     Ok(())
 }
 
+/// One of `CATEGORIES`, or a short id a newer version added. Refusing an unknown
+/// one would stop all syncing with a device that updated first. It is counted
+/// as miscellaneous.
 fn category(field: &'static str, value: &str) -> Result<()> {
-    if !CATEGORIES.contains(&value) {
+    let from_a_newer_version = (1..=32).contains(&value.len())
+        && value.bytes().all(|b| b.is_ascii_lowercase() || b == b'_');
+    if !CATEGORIES.contains(&value) && !from_a_newer_version {
         return Err(Error::invalid(field, "Pick a category."));
     }
     Ok(())

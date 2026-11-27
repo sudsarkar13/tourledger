@@ -683,7 +683,6 @@ fieldset legend,
 }
 
 input:not([type="radio"], [type="checkbox"], [type="file"]),
-select,
 textarea {
   width: 100%;
   min-height: var(--target);
@@ -696,21 +695,6 @@ textarea {
   font: 1rem / 1.4 var(--font);
 }
 
-/* The system arrow sits on the border on some platforms; draw one set inwards. */
-select {
-  -webkit-appearance: none;
-  appearance: none;
-  padding-right: 44px !important;
-  background-image: linear-gradient(45deg, transparent 50%, var(--muted) 50%),
-    linear-gradient(135deg, var(--muted) 50%, transparent 50%);
-  background-position:
-    calc(100% - 22px) 50%,
-    calc(100% - 16px) 50%;
-  background-size: 6px 6px;
-  background-repeat: no-repeat;
-  text-overflow: ellipsis;
-  cursor: pointer;
-}
 
 [aria-invalid="true"] {
   border-color: var(--bad) !important;
@@ -861,6 +845,186 @@ fieldset legend {
 
 .form-actions .delete {
   margin-right: auto;
+}
+
+/* ---- Drop-down menus ---- */
+
+.select-button span {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.select-button svg {
+  flex-shrink: 0;
+  color: var(--accent);
+}
+
+.select-button .select-chevron {
+  color: var(--muted);
+  transition: transform var(--fast) var(--ease);
+}
+
+.select-button[aria-expanded="true"] {
+  border-color: var(--accent);
+}
+
+.select-button[aria-expanded="true"] .select-chevron {
+  transform: rotate(180deg);
+}
+
+/* Glass: what is behind shows through, blurred, under enough colour to read on. */
+.menu {
+  position: fixed;
+  inset: auto;
+  margin: 0;
+  padding: 0;
+  border: 1px solid var(--edge);
+  border-radius: var(--radius-m);
+  color: var(--text);
+  background: var(--surface-solid);
+  -webkit-backdrop-filter: var(--blur);
+  backdrop-filter: var(--blur);
+  box-shadow:
+    0 20px 50px rgb(10 20 45 / 0.28),
+    inset 0 1px 0 var(--edge);
+  overflow: hidden;
+}
+
+/* Older web views cannot mix colours; they keep the solid panel above. */
+@supports (background: color-mix(in srgb, red 50%, transparent)) {
+  .menu {
+    background: color-mix(in srgb, var(--surface-solid) 68%, transparent);
+  }
+}
+
+.menu[open] {
+  display: flex;
+  flex-direction: column;
+  animation: menu-in var(--fast) var(--ease);
+}
+
+.menu::backdrop {
+  background: transparent;
+}
+
+@keyframes menu-in {
+  from {
+    opacity: 0;
+    transform: translateY(-6px) scale(0.97);
+  }
+}
+
+.menu-head {
+  display: none;
+}
+
+.menu-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-height: 0;
+  padding: var(--space-2);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.menu-option {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: var(--space-3);
+  min-height: var(--target);
+  padding: var(--space-1) var(--space-3);
+  border: 0;
+  border-radius: var(--radius-s);
+  background: transparent;
+  color: inherit;
+  font: 1rem / 1.3 var(--font);
+  text-align: left;
+  cursor: pointer;
+  transition: background-color var(--fast);
+}
+
+.menu-option span {
+  flex: 1;
+}
+
+.menu-option i {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: var(--radius-s);
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.menu-option:hover,
+.menu-option:focus-visible {
+  background: var(--accent-soft);
+}
+
+.menu-option:focus-visible {
+  outline-offset: -3px;
+}
+
+.menu-option[aria-selected="true"] {
+  background: var(--accent-soft);
+  font-weight: 600;
+}
+
+.menu-option[aria-selected="true"] > svg {
+  color: var(--accent);
+}
+
+.menu-option[aria-selected="true"] i {
+  background: var(--accent);
+  color: var(--accent-text);
+}
+
+@media (max-width: 639px) {
+  .menu {
+    inset: auto 0 0;
+    width: 100%;
+    max-width: 100%;
+    max-height: min(75dvh, 560px);
+    border-radius: var(--radius-l) var(--radius-l) 0 0;
+  }
+
+  .menu[open] {
+    animation-name: rise;
+  }
+
+  .menu::backdrop {
+    background: rgb(8 12 24 / 0.38);
+  }
+
+  .menu-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-3);
+    padding: var(--space-3) var(--space-3) var(--space-1) var(--space-5);
+    border-bottom: 1px solid var(--line);
+  }
+
+  .menu-list {
+    padding-bottom: calc(var(--space-4) + env(safe-area-inset-bottom));
+  }
+}
+
+/* Solid when effects or transparency are turned down. */
+:root.reduced .menu {
+  background: var(--surface-solid);
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .menu {
+    background: var(--surface-solid);
+  }
 }
 
 /* ---- Sheet and toasts ---- */
@@ -1547,7 +1711,8 @@ button.thumb {
 
 /* ---- Dates ---- */
 
-.date-button {
+.date-button,
+.select-button {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -1580,11 +1745,7 @@ button.thumb {
   max-width: 420px;
 }
 
-.calendar-head select {
-  padding-right: 34px !important;
-  background-position:
-    calc(100% - 18px) 50%,
-    calc(100% - 12px) 50%;
+.calendar-head .select-button {
   font-weight: 700;
 }
 

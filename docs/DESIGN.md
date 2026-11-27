@@ -34,6 +34,10 @@ Sheet                  every create and edit form; bottom sheet on phones
 
 ## Shared components (`ui/src/components`)
 
+Every drop-down is `Select`: a button that opens a glass menu, floating beside it on a
+wide screen and rising from the bottom on a phone. Give an option an `icon` where one
+helps to tell choices apart. Never write a native `<select>`.
+
 Button · Field · DateField · Select · Segmented · Tabs · Card · Sheet · Money · Stat ·
 EmptyState · ListRow · Toast · Confirm · MonthBars · CategoryBars · Meter
 

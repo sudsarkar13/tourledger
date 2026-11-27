@@ -4,13 +4,13 @@ import { BillsField } from "../components/Bills";
 import type { Picture } from "../pictures";
 import { Chips, Input, Segmented, Select, Sheet, Toggle } from "../components/ui";
 import { decimalInput, moneyInput, parseDecimal } from "../format";
-import { categoryOptions, isWorkTrip } from "../labels";
+import { CATEGORIES, categoryOptions, isWorkTrip } from "../labels";
 import { useApp } from "../state";
 import type { Claim, Expense, Tour } from "../types";
 import { DateField } from "../components/DateField";
 import { amount, Form, useForm } from "./useForm";
 
-const TRANSPORT = ["local", "train", "flight", "bus", "fuel"];
+const TRANSPORT = ["local", "metro", "train", "flight", "bus", "fuel"];
 const MODES = ["Auto", "Cab", "Metro", "E-rickshaw", "Bus", "Train", "Flight", "Own vehicle", "Walk"];
 const METHODS = ["", "Cash", "UPI", "Debit card", "Credit card", "Net banking"];
 
@@ -70,7 +70,10 @@ export function ExpenseForm({
   // not create a second expense.
   const savedId = useRef(expense?.id);
   const tour = tourOf(v.tour_id);
-  const transport = TRANSPORT.includes(v.category);
+  // A category from a newer version may be a journey: keep its From, To and By,
+  // or saving here would erase them there.
+  const unknown = !(v.category in CATEGORIES);
+  const transport = TRANSPORT.includes(v.category) || (unknown && !!(v.from || v.to || v.mode));
   const stage = !tour
     ? undefined
     : v.date < tour.start_date
@@ -223,7 +226,7 @@ export function ExpenseForm({
               setFromNote("");
               form.set("category", x);
             }}
-            options={categoryOptions}
+            options={unknown ? [...categoryOptions, { value: v.category, label: "Other (from a newer version)" }] : categoryOptions}
             error={form.errors.category}
             hint={
               fromNote === "history"

@@ -785,6 +785,45 @@ mod tests {
     }
 
     #[test]
+    fn a_category_from_a_newer_version_still_arrives_and_is_claimed() {
+        let (a_dir, b_dir) = (tempfile::tempdir().unwrap(), tempfile::tempdir().unwrap());
+        let a = &mut Store::open(a_dir.path(), "a").unwrap();
+        let tour = save_one(
+            a,
+            TOUR,
+            json!({"name": "Fair", "start_date": "2026-11-14", "end_date": "2026-11-16"}),
+        );
+        save_one(
+            a,
+            EXPENSE,
+            json!({"tour_id": tour, "date": "2026-11-14", "category": "metro",
+                   "amount": 4_000, "paid_by": "me", "claim": "reimbursable"}),
+        );
+        // As if sent by a version that knows a category this one does not.
+        let bundle = call(
+            a,
+            json!({"op": "export_bundle", "include_local": true, "today": "2026-11-20"}),
+        )
+        .unwrap()["content"]
+            .as_str()
+            .unwrap()
+            .replace("\"metro\"", "\"cable_car\"");
+        let b = &mut Store::open(b_dir.path(), "b").unwrap();
+        call(b, json!({"op": "import_bundle", "content": bundle})).unwrap();
+        let report = call(
+            b,
+            json!({"op": "claim_report", "tour_id": tour, "today": "2026-11-20"}),
+        )
+        .unwrap();
+        assert_eq!(report["total"], 4_000);
+        assert_eq!(report["groups"][0]["name"], "Miscellaneous");
+        // Still not a way to store anything at all as a category.
+        let bad = json!({"op": "save", "kind": EXPENSE, "body": {"date": "2026-11-14",
+            "category": "Not A Category!", "amount": 1, "paid_by": "me"}});
+        assert!(call(b, bad).is_err());
+    }
+
+    #[test]
     fn a_trade_fair_from_entry_to_claim() {
         let dir = tempfile::tempdir().unwrap();
         let s = &mut Store::open(dir.path(), "a").unwrap();

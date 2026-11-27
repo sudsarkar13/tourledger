@@ -16,7 +16,7 @@ use crate::views::{Data, TourView};
 const HEADINGS: [(&str, &[&str]); 5] = [
     (
         "Travelling expenses",
-        &["local", "train", "flight", "bus", "fuel"],
+        &["local", "metro", "train", "flight", "bus", "fuel"],
     ),
     ("Food and refreshments", &["food"]),
     ("Stay", &["lodging"]),

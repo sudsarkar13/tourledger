@@ -8,8 +8,9 @@ use crate::settlement::COMPANY_PAYER;
 use crate::store::{Change, Store};
 use crate::views::Data;
 
-pub const CATEGORY_NAMES: [(&str, &str); 12] = [
+pub const CATEGORY_NAMES: [(&str, &str); 13] = [
     ("local", "Local transport"),
+    ("metro", "Metro"),
     ("train", "Train"),
     ("flight", "Flight"),
     ("bus", "Bus"),
@@ -23,11 +24,12 @@ pub const CATEGORY_NAMES: [(&str, &str); 12] = [
     ("other", "Other"),
 ];
 
+/// A category from a newer version has no name here and reads as "Other".
 pub fn category_name(id: &str) -> &str {
     CATEGORY_NAMES
         .iter()
         .find(|(key, _)| *key == id)
-        .map_or(id, |(_, name)| name)
+        .map_or("Other", |(_, name)| name)
 }
 
 fn category_id(text: &str) -> &'static str {

@@ -10,6 +10,7 @@ import {
   Smartphone,
   Ticket,
   TrainFront,
+  TrainFrontTunnel,
   Utensils,
   type LucideIcon,
 } from "lucide-react";
@@ -18,6 +19,7 @@ import { money, plural } from "./format";
 
 export const CATEGORIES: Record<string, { name: string; icon: LucideIcon }> = {
   local: { name: "Local transport", icon: CarTaxiFront },
+  metro: { name: "Metro", icon: TrainFrontTunnel },
   train: { name: "Train", icon: TrainFront },
   flight: { name: "Flight", icon: Plane },
   bus: { name: "Bus", icon: Bus },
@@ -31,12 +33,14 @@ export const CATEGORIES: Record<string, { name: string; icon: LucideIcon }> = {
   other: { name: "Other", icon: ReceiptText },
 };
 
+// A category from a newer version has no name here and reads as "Other".
 export const categoryName = (id: string) =>
-  id === "total" ? "All spending" : (CATEGORIES[id]?.name ?? id);
+  id === "total" ? "All spending" : (CATEGORIES[id]?.name ?? "Other");
 
 export const categoryOptions = Object.entries(CATEGORIES).map(([value, c]) => ({
   value,
   label: c.name,
+  icon: c.icon,
 }));
 
 export const LOAN_CATEGORIES: Record<string, string> = {

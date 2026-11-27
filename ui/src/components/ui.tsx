@@ -1,7 +1,17 @@
 // Every button, field, card, row and dialog in the app. Pages compose these and
 // never style their own (docs/DESIGN.md).
-import { ChevronRight, X, type LucideIcon } from "lucide-react";
-import { useEffect, useId, useRef, type ButtonHTMLAttributes, type ReactNode } from "react";
+import { Check, ChevronDown, ChevronRight, X, type LucideIcon } from "lucide-react";
+import {
+  useEffect,
+  useId,
+  useRef,
+  useState,
+  type ButtonHTMLAttributes,
+  type CSSProperties,
+  type KeyboardEvent,
+  type ReactNode,
+} from "react";
+import { createPortal } from "react-dom";
 import { money } from "../format";
 import { useOverlay } from "../overlays";
 import { useApp } from "../state";
@@ -292,6 +302,13 @@ export function TextArea({
   );
 }
 
+export interface Option {
+  value: string;
+  label: string;
+  icon?: LucideIcon;
+}
+
+/** Every drop-down: a button that opens a glass menu of choices. */
 export function Select({
   label,
   value,
@@ -303,22 +320,193 @@ export function Select({
   label: string;
   value: string;
   onChange: (value: string) => void;
-  options: { value: string; label: string }[];
+  options: Option[];
   error?: string;
   hint?: ReactNode;
 }) {
+  // Where the button was when the menu opened; null while closed.
+  const [anchor, setAnchor] = useState<DOMRect | null>(null);
+  const button = useRef<HTMLButtonElement>(null);
+  const chosen = options.find((o) => o.value === value);
+  const open = () => setAnchor(button.current!.getBoundingClientRect());
+  const close = () => setAnchor(null);
+  // Focus goes back once the menu is gone: until then the page behind it is inert.
+  // Without scrolling, or closing by scrolling away would jump straight back.
+  const wasOpen = useRef(false);
+  useEffect(() => {
+    if (anchor) wasOpen.current = true;
+    else if (wasOpen.current) button.current?.focus({ preventScroll: true });
+  }, [anchor]);
   return (
-    <Field label={label} error={error} hint={hint}>
-      {(props) => (
-        <select {...props} value={value} onChange={(e) => onChange(e.target.value)}>
-          {options.map((o) => (
-            <option key={o.value} value={o.value}>
-              {o.label}
-            </option>
-          ))}
-        </select>
-      )}
-    </Field>
+    <>
+      <Field label={label} error={error} hint={hint}>
+        {(props) => (
+          <button
+            {...props}
+            ref={button}
+            type="button"
+            className="select-button"
+            aria-haspopup="listbox"
+            aria-expanded={anchor !== null}
+            aria-label={`${label}: ${chosen?.label ?? "nothing chosen"}`}
+            onClick={open}
+            onKeyDown={(e) => {
+              if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
+              e.preventDefault();
+              open();
+            }}
+          >
+            {chosen?.icon && <chosen.icon size={18} aria-hidden />}
+            <span>{chosen?.label ?? "Choose"}</span>
+            <ChevronDown className="select-chevron" size={18} aria-hidden />
+          </button>
+        )}
+      </Field>
+      {anchor &&
+        // Outside the surrounding form, so nothing in here can submit it.
+        createPortal(
+          <Menu
+            title={label}
+            anchor={anchor}
+            options={options}
+            value={value}
+            onClose={close}
+            onPick={(picked) => {
+              close();
+              if (picked !== value) onChange(picked);
+            }}
+          />,
+          document.body,
+        )}
+    </>
+  );
+}
+
+/** Beside its button on a wide screen, above it when there is no room below. */
+function placement(button: DOMRect): CSSProperties {
+  const width = Math.min(Math.max(button.width, 240), window.innerWidth - 16);
+  const left = Math.min(Math.max(8, button.left), window.innerWidth - width - 8);
+  const below = window.innerHeight - button.bottom - 14;
+  const above = button.top - 14;
+  const down = below >= 280 || below >= above;
+  const maxHeight = Math.min(360, down ? below : above);
+  return down
+    ? { left, width, maxHeight, top: button.bottom + 6 }
+    : { left, width, maxHeight, bottom: window.innerHeight - button.top + 6 };
+}
+
+/** A list of choices: floating beside its button, or rising from the bottom on phones. */
+function Menu({
+  title,
+  anchor,
+  options,
+  value,
+  onPick,
+  onClose,
+}: {
+  title: string;
+  anchor: DOMRect;
+  options: Option[];
+  value: string;
+  onPick: (value: string) => void;
+  onClose: () => void;
+}) {
+  const dialog = useRef<HTMLDialogElement>(null);
+  const list = useRef<HTMLDivElement>(null);
+  const typed = useRef({ text: "", at: 0 });
+  const [floating] = useState(() => window.matchMedia("(min-width: 640px)").matches);
+  useOverlay(onClose);
+  const items = () => [...(list.current?.querySelectorAll<HTMLButtonElement>("[role=option]") ?? [])];
+  const move = (to: number) => {
+    const item = items()[to];
+    item?.focus();
+    item?.scrollIntoView({ block: "nearest" });
+  };
+
+  useEffect(() => {
+    if (!dialog.current!.open) dialog.current!.showModal();
+    move(Math.max(0, options.findIndex((o) => o.value === value)));
+    // Placed for this width: turning a phone or resizing the window closes it.
+    // Height alone is left, as a keyboard sliding away changes it.
+    const width = window.innerWidth;
+    const resized = () => window.innerWidth !== width && onClose();
+    // A floating menu is placed against its button: close it if that scrolls off.
+    const away = (e: Event) => {
+      if (floating && !dialog.current?.contains(e.target as Node)) onClose();
+    };
+    window.addEventListener("resize", resized);
+    window.addEventListener("scroll", away, true);
+    return () => {
+      window.removeEventListener("resize", resized);
+      window.removeEventListener("scroll", away, true);
+    };
+  }, []);
+
+  const keys = (e: KeyboardEvent) => {
+    const at = items().indexOf(document.activeElement as HTMLButtonElement);
+    const last = options.length - 1;
+    let to: number | null = null;
+    if (e.key === "ArrowDown") to = Math.min(at + 1, last);
+    else if (e.key === "ArrowUp") to = Math.max(at - 1, 0);
+    else if (e.key === "Home") to = 0;
+    else if (e.key === "End") to = last;
+    else if (e.key === "Tab") {
+      e.preventDefault();
+      onClose();
+    } else if (e.key.length === 1 && e.key !== " " && !e.ctrlKey && !e.metaKey && !e.altKey) {
+      // Typing the first letters jumps to a choice, as in a system list.
+      const now = Date.now();
+      const text = (now - typed.current.at < 700 ? typed.current.text : "") + e.key.toLowerCase();
+      typed.current = { text, at: now };
+      const found = options.findIndex((o) => o.label.toLowerCase().startsWith(text));
+      if (found >= 0) to = found;
+    }
+    if (to === null) return;
+    e.preventDefault();
+    move(to);
+  };
+
+  return (
+    <dialog
+      ref={dialog}
+      className="menu"
+      aria-label={title}
+      style={floating ? placement(anchor) : undefined}
+      onCancel={(e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        onClose();
+      }}
+      // The backdrop counts as the dialog itself; the choices fill it.
+      onClick={(e) => e.target === e.currentTarget && onClose()}
+      onKeyDown={keys}
+    >
+      <div className="menu-head">
+        <h2>{title}</h2>
+        <IconButton label="Close" icon={X} onClick={onClose} />
+      </div>
+      <div className="menu-list" ref={list} role="listbox" aria-label={title}>
+        {options.map((o) => (
+          <button
+            key={o.value}
+            type="button"
+            role="option"
+            className="menu-option"
+            aria-selected={o.value === value}
+            tabIndex={-1}
+            onClick={() => onPick(o.value)}
+          >
+            {o.icon && (
+              <i aria-hidden>
+                <o.icon size={17} />
+              </i>
+            )}
+            <span>{o.label}</span>
+            {o.value === value && <Check size={18} aria-hidden />}
+          </button>
+        ))}
+      </div>
+    </dialog>
   );
 }
 
