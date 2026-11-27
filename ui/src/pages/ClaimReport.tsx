@@ -3,7 +3,7 @@ import { Download, FileSpreadsheet, ReceiptText } from "lucide-react";
 import { useEffect, useState } from "react";
 import { api, saveFile, today } from "../api";
 import { ReportPreview } from "../components/ReportPreview";
-import { Button, Card, EmptyState, List, ListRow, Money, PageHeader, Segmented } from "../components/ui";
+import { Button, Card, EmptyState, List, ListRow, Money, PageHeader, Segmented, Toggle } from "../components/ui";
 import { day, fullDay, money } from "../format";
 import { categoryName } from "../labels";
 import { usePreferences } from "../preferences";
@@ -41,17 +41,19 @@ export function ClaimReport({ id }: { id: string }) {
   const { preferences, update } = usePreferences();
   // Totals by category is what is handed over unless detail is asked for.
   const detail = preferences.reportDetail;
+  // Off until asked for: it makes a declaration in the person's name.
+  const proof = preferences.reportProof;
 
   useEffect(() => {
     let stale = false;
-    api<Report>({ op: "claim_report", tour_id: id, today: today(), detail })
+    api<Report>({ op: "claim_report", tour_id: id, today: today(), detail, proof })
       .then((r) => !stale && setReport(r))
       .catch((e) => !stale && fail(e));
     return () => {
       stale = true;
     };
     // Rebuilt when anything is saved or arrives from another device.
-  }, [id, detail, data.revision, fail]);
+  }, [id, detail, proof, data.revision, fail]);
 
   const refile = async (expenseId: string, category: string) => {
     const expense = data.expenses.find((e) => e.id === expenseId);
@@ -68,7 +70,7 @@ export function ClaimReport({ id }: { id: string }) {
   const download = async (format: "pdf" | "csv") => {
     setBusy(true);
     try {
-      const file = await api<ExportedFile>({ op: "export_claim", tour_id: id, format, today: today(), detail });
+      const file = await api<ExportedFile>({ op: "export_claim", tour_id: id, format, today: today(), detail, proof });
       if (await saveFile(file)) notify(`Saved ${file.name}`);
     } catch (error) {
       fail(error);
@@ -80,6 +82,7 @@ export function ClaimReport({ id }: { id: string }) {
   const back = { href: `#/tours/${id}`, label: "Tour" };
   if (!report) return <PageHeader title="Report" back={back} />;
   const claimed = report.groups.filter((g) => g.lines.length);
+  const away = report.bills.filter((b) => !b.present).length;
 
   return (
     <>
@@ -101,6 +104,12 @@ export function ClaimReport({ id }: { id: string }) {
           { value: "entries", label: "Every entry" },
         ]}
       />
+      <Toggle
+        label="Add proof of payment"
+        hint="How each payment was made, and a declaration in your name for those with no picture"
+        checked={proof}
+        onChange={(reportProof) => update({ reportProof })}
+      />
       <Segmented
         label="Show"
         value={view}
@@ -114,6 +123,13 @@ export function ClaimReport({ id }: { id: string }) {
         <p className="muted">
           {report.without_bill} {report.without_bill === 1 ? "entry" : "entries"} in this claim with no bill picture. Open an
           expense to add one.
+        </p>
+      )}
+
+      {away > 0 && (
+        <p className="error" role="alert">
+          {away} {away === 1 ? "picture has" : "pictures have"} not arrived on this device yet, so the PDF will not show{" "}
+          {away === 1 ? "it" : "them"}. Sync with your other device before saving.
         </p>
       )}
 
@@ -138,7 +154,7 @@ export function ClaimReport({ id }: { id: string }) {
       )}
 
       {view === "preview" ? (
-        <ReportPreview tourId={id} detail={detail} />
+        <ReportPreview tourId={id} detail={detail} proof={proof} />
       ) : (
         <>
       <Card title="Who and where">
@@ -209,6 +225,21 @@ export function ClaimReport({ id }: { id: string }) {
         </Card>
       )}
 
+      {report.proof && report.proof_summary.all.count > 0 && (
+        <Card title="How I paid">
+          <List>
+            {report.proof_summary.modes.map((m) => (
+              <ListRow
+                key={m.name}
+                title={m.name}
+                detail={`${m.all.count} paid, ${m.pictured.count} with a picture`}
+                value={<Money paise={m.all.total} />}
+              />
+            ))}
+          </List>
+        </Card>
+      )}
+
       {report.is_claim && (
         <Card title="Settlement">
           <List>
@@ -232,6 +263,25 @@ export function ClaimReport({ id }: { id: string }) {
               Bonus or allowance of {money(report.allowance)} received from the company, not adjusted here.
             </p>
           )}
+        </Card>
+      )}
+
+      {report.proof && report.unproved.length > 0 && (
+        <Card title={`No bill or screenshot attached: ${money(report.unproved_total)}`}>
+          <p>{report.statement}</p>
+          <List>
+            {report.unproved.map((l) => (
+              <ListRow
+                key={l.id}
+                title={detail ? l.particulars : l.category}
+                detail={`${day(l.date)} · ${l.mode}`}
+                value={<Money paise={l.amount} />}
+              />
+            ))}
+          </List>
+          <p className="muted">
+            {[report.declared_by, report.declared_on].filter(Boolean).join(" · ")}
+          </p>
         </Card>
       )}
 

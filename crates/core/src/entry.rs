@@ -43,6 +43,8 @@ pub struct Draft {
     pub mode: String,
     pub paid_by: String,
     pub claim: String,
+    /// UPI, Cash and so on, when the line says.
+    pub payment_method: String,
     pub split_with: Vec<String>,
     pub bill_no: String,
     /// Things to check before saving.
@@ -101,6 +103,24 @@ const MODES: [(&str, &str); 14] = [
     ("flight", "Flight"),
     // Last: "cab to metro" is a cab ride to the station.
     ("metro", "Metro"),
+];
+
+/// Longer wordings first, so "google pay" is not left half read.
+const METHODS: [(&str, &str); 14] = [
+    ("google pay", "UPI"),
+    ("phone pe", "UPI"),
+    ("upi", "UPI"),
+    ("gpay", "UPI"),
+    ("phonepe", "UPI"),
+    ("paytm", "UPI"),
+    ("bhim", "UPI"),
+    ("credit card", "Credit card"),
+    ("debit card", "Debit card"),
+    ("net banking", "Net banking"),
+    ("netbanking", "Net banking"),
+    ("in cash", "Cash"),
+    ("by cash", "Cash"),
+    ("cash", "Cash"),
 ];
 
 const TRANSPORT: [&str; 6] = ["local", "metro", "train", "flight", "bus", "fuel"];
@@ -520,8 +540,36 @@ fn unknown_payer(words: &[Word]) -> Option<String> {
         CATEGORY_WORDS.iter().any(|(_, list)| in_list(list, word))
             || MODES.iter().any(|(m, _)| *m == word)
             || [
-                "i", "me", "we", "self", "fare", "ticket", "tickets", "bill", "amount", "cash",
-                "already", "also", "was", "advance", "fee", "fees", "charge", "charges",
+                "i",
+                "me",
+                "we",
+                "self",
+                "fare",
+                "ticket",
+                "tickets",
+                "bill",
+                "amount",
+                "cash",
+                "upi",
+                "gpay",
+                "phonepe",
+                "paytm",
+                "bhim",
+                "credit",
+                "debit",
+                "net",
+                "netbanking",
+                "google",
+                "phone",
+                "pe",
+                "already",
+                "also",
+                "was",
+                "advance",
+                "fee",
+                "fees",
+                "charge",
+                "charges",
             ]
             .contains(&word)
     };
@@ -540,6 +588,36 @@ fn unknown_payer(words: &[Word]) -> Option<String> {
             && !ordinary(&name.low);
         looks_like_name.then(|| name.raw.clone())
     })
+}
+
+/// How it was paid, with the "by" or "using" that led up to it.
+fn find_method(words: &mut [Word], context: &Context) -> &'static str {
+    for (wording, method) in METHODS {
+        let length = wording.split(' ').count();
+        for at in 0..words.len() {
+            if wording
+                .split(' ')
+                .enumerate()
+                .all(|(i, part)| is(words, at + i, &[part]))
+                // Someone saved under that name, or cash that is the thing bought.
+                && person_at(words, at, context).is_none()
+                && !is(words, at + length, &["withdrawal", "back", "deposit"])
+            {
+                take(words, at, length);
+                if at > 0
+                    && is(
+                        words,
+                        at - 1,
+                        &["by", "via", "in", "using", "through", "with"],
+                    )
+                {
+                    take(words, at - 1, 1);
+                }
+                return method;
+            }
+        }
+    }
+    ""
 }
 
 /// "with Ravi", "for me and Meera".
@@ -771,6 +849,13 @@ pub fn parse_line(line: &str, context: &Context) -> Draft {
     } else {
         "me".into()
     };
+    // After the payer, so "company paid" is read first; before the sharers, so
+    // "with cash" is not taken for a person.
+    let payment_method = if kind == DraftKind::Expense {
+        find_method(&mut w, context)
+    } else {
+        ""
+    };
     let split_with = find_sharers(&mut w, context);
 
     let said_personal = phrase(
@@ -897,6 +982,7 @@ pub fn parse_line(line: &str, context: &Context) -> Draft {
         mode: mode.to_owned(),
         paid_by,
         claim: claim.to_owned(),
+        payment_method: payment_method.to_owned(),
         split_with,
         bill_no,
         warnings,
@@ -1147,5 +1233,52 @@ mod tests {
         assert_eq!(drafts.len(), 3);
         assert_eq!(drafts[0].date, "2026-11-26");
         assert_eq!(drafts[1].claim, "personal");
+    }
+
+    #[test]
+    fn notes_how_it_was_paid() {
+        let people = [("r".to_owned(), "Ravi".to_owned())];
+        let context = Context {
+            today: "2026-11-27".parse().unwrap(),
+            tour_dates: None,
+            company_tour: true,
+            people: &people,
+        };
+        let read = |line: &str| parse(line, &context).remove(0);
+        for (line, method, description) in [
+            ("lunch 240 upi", "UPI", "Lunch"),
+            ("lunch 240 by UPI", "UPI", "Lunch"),
+            ("paid by UPI lunch 240", "UPI", "Lunch"),
+            ("tea 30 cash", "Cash", "Tea"),
+            ("hotel 9600 credit card", "Credit card", "Hotel"),
+            ("dinner 500 using google pay", "UPI", "Dinner"),
+            ("Paid by Phone Pe dinner 240", "UPI", "Dinner"),
+            ("sim card 200", "", "Sim card"),
+        ] {
+            let draft = read(line);
+            assert_eq!(draft.payment_method, method, "{line}");
+            assert_eq!(draft.description, description, "{line}");
+            assert_eq!(
+                (draft.problem.as_str(), draft.paid_by.as_str()),
+                ("", "me"),
+                "{line}"
+            );
+        }
+        assert_eq!(read("ATM cash withdrawal charge 25").payment_method, "");
+        let bhim = [("b".to_owned(), "Bhim".to_owned())];
+        let with_bhim = parse(
+            "lunch with Bhim 640",
+            &Context {
+                people: &bhim,
+                ..context
+            },
+        )
+        .remove(0);
+        assert_eq!(with_bhim.payment_method, "");
+        assert!(with_bhim.split_with.contains(&"b".to_owned()));
+        // Cash from the company is still money, not a purchase.
+        let advance = read("got cash 2000 from company");
+        assert_eq!(advance.kind, DraftKind::Advance);
+        assert_eq!(advance.payment_method, "");
     }
 }

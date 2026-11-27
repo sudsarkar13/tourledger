@@ -11,7 +11,8 @@ One place for values: `ui/src/styles/theme.css`.
 
 Home answers three questions about tours: what did I spend, what has the company
 given me, what is still to come back. No loan figure, reminder or total appears
-outside the Loans area.
+outside the Loans area, with one exception: More → Notifications lists the names
+and due dates of coming instalments, without amounts, to show what is set.
 
 ## Companies
 
@@ -49,6 +50,12 @@ More → Updates holds the version, the state in one line, one primary button fo
 next step, and the switch for automatic checks. A ready update asks once per version
 in a `Sheet`, never over an open form or while something is being typed.
 
+## Notifications
+
+Only loan instalments are notified, and only after the person switches it on in
+More → Notifications, which is also when permission is asked. A test button shows
+whether it works.
+
 ## Behaviour
 
 - Easy entry: a text box takes one expense per line, shows what it understood, and
@@ -61,6 +68,8 @@ in a `Sheet`, never over an open form or while something is being typed.
 - A claim has no signature or approval boxes: it is only submitted.
 - Dates are always `DateField`: a large calendar with month and year choice, the
   tour's days marked. Never the system date input.
+- A journey can save its return in the same step: a second entry with From and To
+  swapped, its own fare and date.
 - A new expense's category follows its note until picked by hand. A saved
   category is only changed when the person presses a button to do it.
 - Forms validate on submit; the message shows under the field, in words that say

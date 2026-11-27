@@ -3,12 +3,14 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
+use chrono::NaiveDate;
 use serde::Serialize;
 
 use crate::entry;
 use crate::export::{category_name, payer_name};
 use crate::model::{Expense, ME, Tour, TourKind, TransferKind};
 use crate::money;
+use crate::proof::Proof;
 use crate::settlement::{COMPANY_PAYER, is_reimbursable};
 use crate::views::{Data, TourView};
 
@@ -33,6 +35,8 @@ pub struct Line {
     /// Who it was spent for.
     pub people: String,
     pub paid_by: String,
+    /// UPI, Cash and so on.
+    pub mode: String,
     pub bill_no: String,
     pub amount: i64,
     /// Numbers of the pictures attached to this entry.
@@ -110,6 +114,17 @@ pub struct Report {
     pub bills: Vec<Bill>,
     /// Listed entries that have no picture.
     pub without_bill: usize,
+    /// Whether the proof of payment summary and its note are part of the report.
+    pub proof: bool,
+    pub proof_summary: Proof,
+    /// My payments with no picture, for the note in my name.
+    pub unproved: Vec<Line>,
+    pub unproved_total: i64,
+    /// What is declared about them, worded once for the screen and the PDF.
+    pub statement: String,
+    /// Name and date the note is made under.
+    pub declared_by: String,
+    pub declared_on: String,
     pub allowance: i64,
     /// What was spent for each person, when more than one is involved.
     pub by_person: Vec<(String, i64)>,
@@ -120,7 +135,7 @@ pub struct Report {
 }
 
 fn readable(iso: &str) -> String {
-    chrono::NaiveDate::parse_from_str(iso, "%Y-%m-%d")
+    NaiveDate::parse_from_str(iso, "%Y-%m-%d")
         .map_or_else(|_| iso.to_owned(), |d| d.format("%-d %b %Y").to_string())
 }
 
@@ -185,8 +200,19 @@ fn people(data: &Data, tour: &Tour, e: &Expense) -> String {
     names.join(", ")
 }
 
+fn statement(is_claim: bool) -> String {
+    let said = "I paid the amounts listed below myself for this tour. No bill or payment \
+                screenshot is attached for them.";
+    if is_claim {
+        format!("{said} I ask for them to be reimbursed with the rest of this claim.")
+    } else {
+        said.to_owned()
+    }
+}
+
 /// `detail` adds every entry; without it only totals by category are handed over.
-pub fn build(data: &Data, tour: &TourView, detail: bool) -> Report {
+/// `proof` adds how each payment was made and names those with no picture.
+pub fn build(data: &Data, tour: &TourView, detail: bool, proof: bool, today: NaiveDate) -> Report {
     let t = &tour.data;
     let is_claim = t.kind == TourKind::Company;
     let company = data.companies.iter().find(|c| c.id == t.company_id);
@@ -221,6 +247,7 @@ pub fn build(data: &Data, tour: &TourView, detail: bool) -> Report {
             } else {
                 payer_name(data, &x.paid_by)
             },
+            mode: crate::proof::mode_name(&x.payment_method).to_owned(),
             bill_no: x.bill_no.clone(),
             amount: e.home,
             bills: Vec::new(),
@@ -299,6 +326,22 @@ pub fn build(data: &Data, tour: &TourView, detail: bool) -> Report {
             }
         }
     }
+
+    let missing: BTreeSet<&str> = tour.proof.missing.iter().map(String::as_str).collect();
+    let mut unproved: Vec<Line> = groups
+        .iter()
+        .flat_map(|g| {
+            g.lines
+                .iter()
+                .filter(|l| missing.contains(l.id.as_str()))
+                // Under its heading, which is what a totals-only report shows.
+                .map(|l| Line {
+                    category: g.name.clone(),
+                    ..l.clone()
+                })
+        })
+        .collect();
+    unproved.sort_by(|a, b| (&a.date, &a.id).cmp(&(&b.date, &b.id)));
 
     let mut transfers: Vec<_> = data
         .transfers
@@ -407,6 +450,13 @@ pub fn build(data: &Data, tour: &TourView, detail: bool) -> Report {
         check,
         bills,
         without_bill,
+        proof,
+        proof_summary: tour.proof.clone(),
+        unproved_total: unproved.iter().map(|l| l.amount).sum(),
+        statement: statement(is_claim),
+        unproved,
+        declared_by: data.profile.name.trim().to_owned(),
+        declared_on: readable(&today.format("%Y-%m-%d").to_string()),
         allowance: s.allowance,
         by_person,
         is_claim,

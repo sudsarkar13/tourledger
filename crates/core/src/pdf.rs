@@ -226,6 +226,30 @@ impl Layout {
         self.y += 4.0;
     }
 
+    /// As `amount_row`, for a label that may need more than one line.
+    fn long_amount_row(&mut self, label: &str, amount: i64) {
+        let lines = self.regular.wrap(label, BODY, WIDTH - 2.0 * MARGIN - 100.0);
+        self.room(lines.len() as f32 * 12.0 + 6.0);
+        let value = format!("₹ {}", money::indian(amount));
+        for (i, line) in lines.iter().enumerate() {
+            self.y += 12.0;
+            let y = self.y;
+            self.text(MARGIN + 6.0, y, line, BODY, false, 0, Align::Left);
+            if i == 0 {
+                self.text(
+                    WIDTH - MARGIN - 6.0,
+                    y,
+                    &value,
+                    BODY,
+                    false,
+                    0,
+                    Align::Right,
+                );
+            }
+        }
+        self.y += 5.0;
+    }
+
     /// Two columns of "label: value".
     fn pairs(&mut self, pairs: &[(String, String)]) {
         let half = (WIDTH - 2.0 * MARGIN) / 2.0;
@@ -442,6 +466,11 @@ fn compose(report: &Report, layout: &mut Layout) {
         }
     }
 
+    let proof = report.proof && report.proof_summary.all.count > 0;
+    if proof {
+        proof_summary(report, layout);
+    }
+
     if report.is_claim {
         // Decided before the heading, so the heading and sums stay on one page.
         layout.room(140.0 + report.money.len() as f32 * 17.0);
@@ -489,6 +518,83 @@ fn compose(report: &Report, layout: &mut Layout) {
             layout.text(MARGIN + 6.0, y, &note, BODY, false, 60, Align::Left);
             layout.y += 14.0;
         }
+    }
+
+    // Last, so it reads as the statement the name under it makes.
+    if report.proof && !report.unproved.is_empty() {
+        declaration(report, layout);
+    }
+}
+
+/// How my payments were made, and how many have a picture.
+fn proof_summary(report: &Report, layout: &mut Layout) {
+    let p = &report.proof_summary;
+    let payments = |n: usize| format!("{n} {}", if n == 1 { "payment" } else { "payments" });
+    layout.heading("How I paid, and the pictures attached");
+    for mode in &p.modes {
+        let label = format!(
+            "{}: {}, {} with a picture",
+            mode.name,
+            payments(mode.all.count),
+            mode.pictured.count
+        );
+        layout.amount_row(&label, mode.all.total, false);
+        layout.rule(220);
+    }
+    layout.amount_row(
+        &format!("With a picture: {}", payments(p.pictured.count)),
+        p.pictured.total,
+        true,
+    );
+    layout.amount_row(
+        &format!(
+            "Without a picture: {}",
+            payments(p.all.count - p.pictured.count)
+        ),
+        p.all.total - p.pictured.total,
+        true,
+    );
+}
+
+fn declaration(report: &Report, layout: &mut Layout) {
+    layout.heading("Declaration: payments with no bill or payment screenshot attached");
+    for line in layout
+        .regular
+        .wrap(&report.statement, BODY, WIDTH - 2.0 * MARGIN)
+    {
+        layout.room(12.0);
+        layout.y += 12.0;
+        let y = layout.y;
+        layout.text(MARGIN + 6.0, y, &line, BODY, false, 0, Align::Left);
+    }
+    layout.y += 6.0;
+    for line in &report.unproved {
+        let mut label = format!(
+            "{}  ·  {}  ·  {}",
+            short_date(&line.date),
+            line.category,
+            line.mode
+        );
+        // A totals-only report keeps what was bought to itself.
+        if report.detail {
+            label.push_str("  ·  ");
+            label.push_str(&line.particulars);
+        }
+        layout.long_amount_row(&label, line.amount);
+        layout.rule(220);
+    }
+    layout.amount_row("Total without a picture", report.unproved_total, true);
+    layout.room(34.0);
+    layout.y += 6.0;
+    let by = [
+        ("Name", report.declared_by.as_str()),
+        ("Date", report.declared_on.as_str()),
+    ];
+    for (label, value) in by.into_iter().filter(|(_, v)| !v.is_empty()) {
+        layout.y += 12.0;
+        let y = layout.y;
+        let text = format!("{label}: {value}");
+        layout.text(MARGIN + 6.0, y, &text, BODY, false, 0, Align::Left);
     }
 }
 

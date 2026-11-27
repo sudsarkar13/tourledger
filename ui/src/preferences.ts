@@ -8,12 +8,32 @@ export interface Preferences {
   company: string;
   /** Claim reports list every entry, not just totals by category. */
   reportDetail: boolean;
+  /** Reports add how each payment was made and a note for those with no picture. */
+  reportProof: boolean;
   /** Look for a newer version and download it. */
   checkUpdates: boolean;
+  /** Loan instalment reminders on this device, and how they are given. */
+  reminders: boolean;
+  remindDays: number;
+  remindHour: number;
+  remindMissed: boolean;
+  remindAmounts: boolean;
 }
 
 const KEY = "tourledger.preferences";
-const defaults: Preferences = { theme: "system", reduced: false, company: "", reportDetail: false, checkUpdates: true };
+const defaults: Preferences = {
+  theme: "system",
+  reduced: false,
+  company: "",
+  reportDetail: false,
+  reportProof: false,
+  checkUpdates: true,
+  reminders: false,
+  remindDays: 3,
+  remindHour: 9,
+  remindMissed: true,
+  remindAmounts: false,
+};
 
 function load(): Preferences {
   try {

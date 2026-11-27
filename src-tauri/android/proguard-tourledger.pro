@@ -8,3 +8,6 @@
 -keepclassmembers class app.tourledger.** {
   @android.webkit.JavascriptInterface <methods>;
 }
+
+# Reminders are read back from storage by name, after a restart too.
+-keep class app.tauri.notification.** { *; }

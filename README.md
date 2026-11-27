@@ -39,8 +39,8 @@ For one person, across your own computer and phone. No account, no sign-up.
 
 ### 🧳 Track a tour as it happens
 Type `cab home to station 180` or `company gave 2000`, check what was understood, and
-save. A note picks the category. Advances, your own spending and what is still due
-stay up to date. Rules, not AI.
+save. A note picks the category. A journey there and back goes in at once. Advances,
+your own spending and what is still due stay up to date. Rules, not AI.
 
 </td>
 <td width="50%" valign="top">
@@ -64,7 +64,7 @@ spending by category.
 
 ### 🏦 Keep loans in view
 A separate area for loans and EMIs: what is due, what is overdue, interest paid and
-to come, and your debt-free date.
+to come, your debt-free date, and a reminder before each instalment.
 
 </td>
 </tr>
@@ -223,8 +223,10 @@ device's identity and keys.
 - Editing the same entry on two devices before they sync keeps the later edit only.
 - A restore does not bring back items deleted after the backup was made, if the ledger
   still remembers the deletion.
-- Bills are pictures only (no PDF invoices). No per-diem rules or notifications while
-  the app is closed.
+- Bills are pictures only (no PDF invoices). No per-diem rules.
+- Loan reminders arrive with the app closed on Android only; on a computer, while it
+  is open. A payment marked on another device counts once the two have synced and the
+  app has been opened.
 - The PDF cannot draw Indian scripts; such characters print as `?`.
 - Amounts are shown in rupees; other currencies are converted at your entered rate.
 - Nothing can erase data from a lost device. Unlinking works per pair: unlink the lost

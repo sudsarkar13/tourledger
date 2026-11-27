@@ -25,6 +25,7 @@ function expenseBody(d: Draft, tourId: string) {
     claim: tourId ? d.claim : ("personal" as const),
     split_with: d.split_with,
     bill_no: d.bill_no,
+    payment_method: d.payment_method,
   };
 }
 
@@ -46,6 +47,7 @@ function describe(data: Snapshot, d: Draft): { title: string; detail: string } {
     detail: [
       day(d.date),
       d.mode,
+      d.payment_method,
       `paid by ${d.paid_by === "me" ? "me" : personName(data, d.paid_by)}`,
       d.paid_by !== "me" ? "" : d.claim === "reimbursable" ? "to claim" : "my own cost",
       sharers && `for ${sharers}`,
@@ -120,7 +122,7 @@ export function QuickEntry({ tourId, tourChoices }: { tourId: string; tourChoice
   return (
     <Card title="Quick entry">
       <p className="muted">
-        One line for each thing, for example <em>auto home to station 180 on 14 Nov</em>, <em>lunch with Ravi 640</em>,{" "}
+        One line for each thing, for example <em>auto home to station 180 on 14 Nov</em>, <em>lunch with Ravi 640 upi</em>,{" "}
         <em>hotel 9600 company paid</em> or <em>company gave 2000</em>.
       </p>
       {tourChoices && (

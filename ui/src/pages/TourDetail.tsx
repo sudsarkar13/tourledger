@@ -2,6 +2,7 @@ import { ArrowLeftRight, FileText, HandCoins, Pencil, Plus, ReceiptText } from "
 import { useState } from "react";
 import { today } from "../api";
 import { CategoryBars, Meter } from "../components/charts";
+import { ProofCard } from "../components/ProofCard";
 import { Badge, Button, Card, EmptyState, List, ListRow, Money, PageHeader, Stat } from "../components/ui";
 import { ExpenseForm } from "../forms/ExpenseForm";
 import { TransferForm } from "../forms/MoneyForms";
@@ -50,7 +51,7 @@ export function TourDetail({ id }: { id: string }) {
 
   const advance = async (to: TourStatus) => {
     try {
-      const { id: _id, summary: _summary, claim_state: _state, ...body }: Tour = tour;
+      const { id: _id, summary: _summary, claim_state: _state, proof: _proof, ...body }: Tour = tour;
       await save("tour", { ...body, status: to, submitted_on: to === "submitted" ? today() : body.submitted_on }, id);
       notify(`Marked ${TOUR_STATUS[to].toLowerCase()}`);
     } catch (error) {
@@ -140,6 +141,9 @@ export function TourDetail({ id }: { id: string }) {
         </Card>
 
         <div className="stack">
+          {tour.proof.all.count > 0 && (
+            <ProofCard key={id} claim={company} proof={tour.proof} expenses={expenses} onOpen={setExpense} />
+          )}
           {s.total_cost > 0 && (
             <Card title="Where it went">
               <CategoryBars values={s.by_category} />

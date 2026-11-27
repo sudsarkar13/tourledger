@@ -78,6 +78,13 @@ case "${1:-desktop}" in
         grep -q "android.permission.$permission" "$manifest" || { echo "Could not add $permission." >&2; exit 1; }
       fi
     done
+    # An update drops scheduled reminders, as a restart does. Set them again
+    # without waiting for the app to be opened.
+    if ! grep -q 'android.intent.action.MY_PACKAGE_REPLACED' "$manifest"; then
+      sed -i.bak 's|</application>|<receiver android:name="app.tauri.notification.LocalNotificationRestoreReceiver" android:exported="false"><intent-filter><action android:name="android.intent.action.MY_PACKAGE_REPLACED" /></intent-filter></receiver>\
+    </application>|' "$manifest" && rm "$manifest.bak"
+      grep -q 'android.intent.action.MY_PACKAGE_REPLACED' "$manifest" || { echo "Could not add the reminder receiver." >&2; exit 1; }
+    fi
     # Keeps the page clear of the system bars and the keyboard, and asks for
     # local network access when the page needs it.
     cp src-tauri/android/MainActivity.kt src-tauri/android/Updater.kt \

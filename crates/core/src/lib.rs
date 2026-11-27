@@ -14,6 +14,8 @@ pub mod model;
 pub mod money;
 pub mod pdf;
 pub mod portfolio;
+pub mod proof;
+pub mod reminders;
 pub mod report;
 pub mod settlement;
 pub mod share;

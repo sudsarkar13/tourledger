@@ -41,6 +41,12 @@ pub enum Request {
         tour_id: String,
         today: String,
     },
+    /// Loan instalments to remind of.
+    Reminders {
+        today: String,
+        lead_days: u32,
+        missed: bool,
+    },
     /// Saves several expenses and company payments together, all or none.
     SaveMany {
         items: Vec<Item>,
@@ -50,6 +56,8 @@ pub enum Request {
         today: String,
         #[serde(default)]
         detail: bool,
+        #[serde(default)]
+        proof: bool,
     },
     ExportClaim {
         tour_id: String,
@@ -57,6 +65,8 @@ pub enum Request {
         today: String,
         #[serde(default)]
         detail: bool,
+        #[serde(default)]
+        proof: bool,
     },
     /// A JPEG, base64, for one expense.
     AddAttachment {
@@ -72,6 +82,8 @@ pub enum Request {
         today: String,
         #[serde(default)]
         detail: bool,
+        #[serde(default)]
+        proof: bool,
     },
     /// Which category a typed note belongs to.
     SuggestCategory {
@@ -625,6 +637,7 @@ fn claim_report(
     tour_id: &str,
     now: NaiveDate,
     detail: bool,
+    proof: bool,
 ) -> Result<report::Report> {
     let data = views::data(store, now);
     let tour = data
@@ -632,7 +645,7 @@ fn claim_report(
         .iter()
         .find(|x| x.id == tour_id)
         .ok_or(Error::NotFound)?;
-    Ok(report::build(&data, tour, detail))
+    Ok(report::build(&data, tour, detail, proof, now))
 }
 
 pub fn handle(store: &mut Store, request: Request) -> Result<Value> {
@@ -642,6 +655,16 @@ pub fn handle(store: &mut Store, request: Request) -> Result<Value> {
         }
         Request::Save { kind, id, body } => save(store, &kind, id, body),
         Request::Delete { kind, id } => delete(store, &kind, &id),
+        Request::Reminders {
+            today: t,
+            lead_days,
+            missed,
+        } => {
+            let today = today(&t)?;
+            let data = crate::views::data(store, today);
+            let list = crate::reminders::upcoming(&data.loans, today, lead_days, missed);
+            Ok(serde_json::to_value(list)?)
+        }
         Request::LoanPreview {
             principal,
             rate_bps,
@@ -673,19 +696,22 @@ pub fn handle(store: &mut Store, request: Request) -> Result<Value> {
             tour_id,
             today: t,
             detail,
+            proof,
         } => Ok(serde_json::to_value(claim_report(
             store,
             &tour_id,
             today(&t)?,
             detail,
+            proof,
         )?)?),
         Request::ExportClaim {
             tour_id,
             format,
             today: t,
             detail,
+            proof,
         } => {
-            let report = claim_report(store, &tour_id, today(&t)?, detail)?;
+            let report = claim_report(store, &tour_id, today(&t)?, detail, proof)?;
             let kind = if report.is_claim { "claim" } else { "expenses" };
             let name = format!("{kind}-{}", slug(&report.tour));
             let pictures = report_pictures(store, &report);
@@ -711,8 +737,9 @@ pub fn handle(store: &mut Store, request: Request) -> Result<Value> {
             tour_id,
             today: t,
             detail,
+            proof,
         } => {
-            let report = claim_report(store, &tour_id, today(&t)?, detail)?;
+            let report = claim_report(store, &tour_id, today(&t)?, detail, proof)?;
             let pictures = report_pictures(store, &report);
             let pages = pdf::preview(&report, &pictures)?;
             let images: serde_json::Map<String, Value> = pictures
@@ -782,6 +809,64 @@ mod tests {
             .as_str()
             .unwrap()
             .to_owned()
+    }
+
+    #[test]
+    fn reminders_cover_unpaid_instalments_only() {
+        let dir = tempfile::tempdir().unwrap();
+        let s = &mut Store::open(dir.path(), "a").unwrap();
+        let loan = save_one(
+            s,
+            "loan",
+            json!({"name": "Car", "category": "vehicle", "principal": 120_000, "rate_bps": 0,
+                   "tenure_months": 12, "start_date": "2026-09-10", "first_due_date": "2026-10-10"}),
+        );
+        let list = |s: &mut Store, lead: u32, missed: bool| {
+            call(
+                s,
+                json!({"op": "reminders", "today": "2026-11-27", "lead_days": lead, "missed": missed}),
+            )
+            .unwrap()
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|r| {
+                format!(
+                    "{} {} due {}",
+                    r["on"].as_str().unwrap(),
+                    r["kind"].as_str().unwrap(),
+                    r["due"].as_str().unwrap()
+                )
+            })
+            .collect::<Vec<_>>()
+        };
+        // Paid: October. Missed: 10 November. Coming: December and January.
+        call(s, json!({"op": "loan_mark", "loan_id": loan, "number": 1, "paid": true, "today": "2026-11-27"})).unwrap();
+        assert_eq!(
+            list(s, 3, true),
+            [
+                "2026-11-11 missed due 2026-11-10",
+                "2026-12-07 before due 2026-12-10",
+                "2026-12-10 due due 2026-12-10",
+                "2026-12-11 missed due 2026-12-10",
+                "2027-01-07 before due 2027-01-10",
+                "2027-01-10 due due 2027-01-10",
+                "2027-01-11 missed due 2027-01-10",
+            ]
+        );
+        assert_eq!(
+            list(s, 0, false),
+            [
+                "2026-12-10 due due 2026-12-10",
+                "2027-01-10 due due 2027-01-10"
+            ]
+        );
+        call(
+            s,
+            json!({"op": "loan_close", "loan_id": loan, "date": "2026-11-27", "amount": 0}),
+        )
+        .unwrap();
+        assert!(list(s, 3, true).is_empty());
     }
 
     #[test]
@@ -979,6 +1064,82 @@ mod tests {
             b"/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAP//////////////////////////////////////////////////////////////////////////////////////wAALCAAIAAgBAREA/8QAFAABAAAAAAAAAAAAAAAAAAAAB//EABQQAQAAAAAAAAAAAAAAAAAAAAD/2gAIAQEAAD8AN//Z",
         )
         .unwrap()
+    }
+
+    #[test]
+    fn proof_counts_my_claimed_payments_and_names_those_without_a_picture() {
+        let dir = tempfile::tempdir().unwrap();
+        let s = &mut Store::open(dir.path(), "a").unwrap();
+        let company = save_one(s, COMPANY, json!({"name": "Acme"}));
+        let tour = save_one(
+            s,
+            TOUR,
+            json!({"name": "Fair", "kind": "company", "company_id": company,
+                   "start_date": "2026-11-14", "end_date": "2026-11-16"}),
+        );
+        let spend = |s: &mut Store, amount: i64, method: &str, by: &str, claim: &str| {
+            save_one(
+                s,
+                EXPENSE,
+                json!({"tour_id": tour, "date": "2026-11-14", "category": "food", "amount": amount,
+                       "paid_by": by, "claim": claim, "payment_method": method,
+                       "description": "Lunch"}),
+            )
+        };
+        let shown = spend(s, 10_000, "UPI", "me", "reimbursable");
+        spend(s, 20_000, "UPI", "me", "reimbursable");
+        spend(s, 5_000, "Cash", "me", "reimbursable");
+        // Neither is mine to prove.
+        spend(s, 7_000, "UPI", "company", "reimbursable");
+        spend(s, 900, "Cash", "me", "personal");
+        let picture = data_encoding::BASE64.encode(&jpeg());
+        call(
+            s,
+            json!({"op": "add_attachment", "expense_id": shown, "data": picture}),
+        )
+        .unwrap();
+
+        let snap = call(s, json!({"op": "snapshot", "today": "2026-11-27"})).unwrap();
+        let proof = &snap["tours"][0]["proof"];
+        assert_eq!(proof["all"], json!({"count": 3, "total": 35_000}));
+        assert_eq!(proof["pictured"], json!({"count": 1, "total": 10_000}));
+        assert_eq!(proof["missing"].as_array().unwrap().len(), 2);
+        assert_eq!(proof["modes"][0]["name"], "UPI");
+        assert_eq!(proof["modes"][0]["all"]["count"], 2);
+        assert_eq!(proof["modes"][0]["pictured"]["count"], 1);
+        assert_eq!(proof["modes"][1]["name"], "Cash");
+
+        let report = |s: &mut Store, proof: bool| {
+            call(
+                s,
+                json!({"op": "claim_report", "tour_id": tour, "today": "2026-11-27",
+                       "proof": proof}),
+            )
+            .unwrap()
+        };
+        let with = report(s, true);
+        assert_eq!(with["total"], 35_000);
+        assert_eq!(with["unproved"].as_array().unwrap().len(), 2);
+        assert_eq!(with["declared_on"], "27 Nov 2026");
+        let words = |s: &mut Store, proof: bool| {
+            call(
+                s,
+                json!({"op": "report_preview", "tour_id": tour, "today": "2026-11-27",
+                       "proof": proof}),
+            )
+            .unwrap()["pages"]
+                .to_string()
+        };
+        assert!(words(s, true).contains("Declaration: payments with no bill"));
+        // Nothing is declared in my name unless asked for.
+        assert!(!words(s, false).contains("Declaration"));
+        let csv = call(
+            s,
+            json!({"op": "export_claim", "tour_id": tour, "today": "2026-11-27",
+                   "format": "csv", "proof": true}),
+        )
+        .unwrap();
+        assert!(csv.to_string().contains("Total without a picture"));
     }
 
     #[test]

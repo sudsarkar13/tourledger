@@ -3,7 +3,7 @@ import { api, ApiError, today } from "../api";
 import { BillsField } from "../components/Bills";
 import type { Picture } from "../pictures";
 import { Chips, Input, Segmented, Select, Sheet, Toggle } from "../components/ui";
-import { decimalInput, moneyInput, parseDecimal } from "../format";
+import { day, decimalInput, moneyInput, parseDecimal } from "../format";
 import { CATEGORIES, categoryOptions, isWorkTrip } from "../labels";
 import { useApp } from "../state";
 import type { Claim, Expense, Tour } from "../types";
@@ -69,18 +69,34 @@ export function ExpenseForm({
   // Set once a new expense is stored, so retrying after a failed picture does
   // not create a second expense.
   const savedId = useRef(expense?.id);
+  // The way back is saved as its own entry. Its fare and date follow the first
+  // journey until they are changed.
+  const [returning, setReturning] = useState(false);
+  const [wayBack, setWayBack] = useState<{ fare: string | null; date: string | null }>({ fare: null, date: null });
+  const returnedId = useRef<string | undefined>(undefined);
   const tour = tourOf(v.tour_id);
   // A category from a newer version may be a journey: keep its From, To and By,
   // or saving here would erase them there.
   const unknown = !(v.category in CATEGORIES);
   const transport = TRANSPORT.includes(v.category) || (unknown && !!(v.from || v.to || v.mode));
-  const stage = !tour
-    ? undefined
-    : v.date < tour.start_date
-      ? "Before the event: counted as the journey"
-      : v.date > tour.end_date
-        ? "After the event: counted as the return"
-        : undefined;
+  const stageOf = (date: string) =>
+    !tour
+      ? undefined
+      : date < tour.start_date
+        ? "Before the event: counted as the journey"
+        : date > tour.end_date
+          ? "After the event: counted as the return"
+          : undefined;
+  const returnFare = wayBack.fare ?? v.amount;
+  const returnDate = wayBack.date ?? v.date;
+  // Editing an entry whose way back is already there: say so before adding another.
+  const same = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLowerCase();
+  const recorded =
+    expense && v.from.trim() && v.to.trim()
+      ? data.expenses.find(
+          (x) => x.id !== expense.id && x.tour_id === v.tour_id && x.date >= v.date && same(x.from, v.to) && same(x.to, v.from),
+        )
+      : undefined;
   const companyPaid = v.paid_by === "company";
   // A claim is made per tour.
   const reimbursable = !!v.tour_id && v.claim === "reimbursable";
@@ -140,7 +156,34 @@ export function ExpenseForm({
       split_with: canSplit ? v.split_with : [],
       local_only: !v.tour_id && v.local_only,
     };
+    // Checked before anything is saved, so a mistake here leaves nothing half done.
+    let back: typeof body | undefined;
+    if (returning && transport) {
+      const fare = amount("return_amount", returnFare);
+      if (!fare) throw new ApiError("Enter the return fare.", "return_amount");
+      if (returnDate < v.date) throw new ApiError("The return cannot be before the journey.", "return_date");
+      back = {
+        ...body,
+        date: returnDate,
+        from: body.to,
+        to: body.from,
+        amount: fare,
+        description: body.description && `${body.description} (return)`,
+        bill_no: "",
+        rejected: false,
+      };
+    }
     savedId.current = await save("expense", body, savedId.current);
+    // Kept apart from the first, so a retry updates it rather than adding a third.
+    if (back) {
+      try {
+        returnedId.current = await save("expense", back, returnedId.current);
+      } catch (error) {
+        const reason = error instanceof Error ? error.message : String(error);
+        // Said under the return, so it is not taken for the whole entry failing.
+        throw new ApiError(`The journey was saved, the return was not: ${reason}`, "return_amount");
+      }
+    }
     // One at a time; each saved one leaves the list, so none is sent twice.
     for (let i = 0; i < pictures.length; i++) {
       await api({ op: "add_attachment", expense_id: savedId.current, data: pictures[i].data });
@@ -159,7 +202,8 @@ export function ExpenseForm({
         claim: body.claim,
       });
     }
-    notify(expense ? "Expense updated" : "Expense added");
+    if (returnedId.current) notify(expense ? "Expense updated, return added" : "Journey and return added");
+    else notify(expense ? "Expense updated" : "Expense added");
     onSaved?.();
     onClose();
   });
@@ -178,7 +222,9 @@ export function ExpenseForm({
         onSubmit={submit}
         busy={form.busy}
         message={form.message}
-        submitLabel={expense ? "Save changes" : "Add expense"}
+        submitLabel={
+          returning && transport ? (expense ? "Save and add return" : "Add both journeys") : expense ? "Save changes" : "Add expense"
+        }
         onDelete={onDelete}
       >
         {!expense && data.quick.length > 0 && (
@@ -217,7 +263,7 @@ export function ExpenseForm({
             inputMode="decimal"
             autoFocus={!expense}
           />
-          <DateField label="Date" event={tour && { from: tour.start_date, to: tour.end_date }} hint={stage} value={v.date} onChange={(x) => form.set("date", x)} error={form.errors.date} />
+          <DateField label="Date" event={tour && { from: tour.start_date, to: tour.end_date }} hint={stageOf(v.date)} value={v.date} onChange={(x) => form.set("date", x)} error={form.errors.date} />
           <Select
             label="Category"
             value={v.category}
@@ -253,6 +299,43 @@ export function ExpenseForm({
             <Input label="To" value={v.to} onChange={(x) => form.set("to", x)} placeholder="Railway station" />
             <Input label="By" value={v.mode} onChange={(x) => form.set("mode", x)} list={MODES} placeholder="Auto" />
           </div>
+        )}
+        {transport && (
+          <>
+            <Toggle
+              label="Add the return journey"
+              hint={[
+                v.from.trim() && v.to.trim()
+                  ? `A second entry, ${v.to.trim()} → ${v.from.trim()}.`
+                  : "A second entry, From and To the other way round, paid the same way.",
+                recorded && `That way back is already recorded on ${day(recorded.date)}.`,
+                returning && pictures.length > 0 && "Bill pictures stay with the first journey.",
+              ]
+                .filter(Boolean)
+                .join(" ")}
+              checked={returning}
+              onChange={setReturning}
+            />
+            {returning && (
+              <div className="grid-2">
+                <Input
+                  label={v.foreign ? `Return fare (${v.currency || "foreign"})` : "Return fare (₹)"}
+                  value={returnFare}
+                  onChange={(fare) => setWayBack((w) => ({ ...w, fare }))}
+                  error={form.errors.return_amount}
+                  inputMode="decimal"
+                />
+                <DateField
+                  label="Return date"
+                  event={tour && { from: tour.start_date, to: tour.end_date }}
+                  hint={stageOf(returnDate)}
+                  value={returnDate}
+                  onChange={(date) => setWayBack((w) => ({ ...w, date }))}
+                  error={form.errors.return_date}
+                />
+              </div>
+            )}
+          </>
         )}
         <div className="grid-2">
           <Select
@@ -292,18 +375,16 @@ export function ExpenseForm({
             }
           />
         )}
+        <Select
+          label="Paid with"
+          value={v.payment_method}
+          onChange={(x) => form.set("payment_method", x)}
+          options={METHODS.map((m) => ({ value: m, label: m || "Not noted" }))}
+        />
         <BillsField expenseId={savedId.current} pending={pictures} onPending={setPictures} />
         <details className="more" open={showMore || hiddenError} onToggle={(event) => setShowMore(event.currentTarget.open)}>
           <summary>More details</summary>
-          <div className="grid-2">
-            <Select
-              label="Paid with"
-              value={v.payment_method}
-              onChange={(x) => form.set("payment_method", x)}
-              options={METHODS.map((m) => ({ value: m, label: m || "Not noted" }))}
-            />
-            <Input label="Bill number" value={v.bill_no} onChange={(x) => form.set("bill_no", x)} />
-          </div>
+          <Input label="Bill number" value={v.bill_no} onChange={(x) => form.set("bill_no", x)} />
           <Toggle label="Paid in a foreign currency" checked={v.foreign} onChange={(x) => form.set("foreign", x)} />
           {v.foreign && (
             <div className="grid-2">

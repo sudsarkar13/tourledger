@@ -36,20 +36,20 @@ function Mark({ mark, images }: { mark: PreviewMark; images: Preview["images"] }
   );
 }
 
-export function ReportPreview({ tourId, detail }: { tourId: string; detail: boolean }) {
+export function ReportPreview({ tourId, detail, proof }: { tourId: string; detail: boolean; proof: boolean }) {
   const { data, fail } = useApp();
   const [preview, setPreview] = useState<Preview | null>(null);
   const [large, setLarge] = useState(false);
 
   useEffect(() => {
     let stale = false;
-    api<Preview>({ op: "report_preview", tour_id: tourId, today: today(), detail })
+    api<Preview>({ op: "report_preview", tour_id: tourId, today: today(), detail, proof })
       .then((p) => !stale && setPreview(p))
       .catch((e) => !stale && fail(e));
     return () => {
       stale = true;
     };
-  }, [tourId, detail, data.revision, fail]);
+  }, [tourId, detail, proof, data.revision, fail]);
 
   if (!preview) return <p className="muted">Preparing the preview…</p>;
   const total = preview.pages.length;

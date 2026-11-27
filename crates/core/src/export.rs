@@ -239,6 +239,44 @@ pub fn report_csv(report: &Report) -> Result<String> {
             ));
         }
     }
+    if report.proof && report.proof_summary.all.count > 0 {
+        let p = &report.proof_summary;
+        rows.push(vec![]);
+        rows.push(
+            ["I paid with", "Payments", "With a picture", "Amount (INR)"]
+                .map(String::from)
+                .to_vec(),
+        );
+        rows.extend(p.modes.iter().map(|m| {
+            vec![
+                m.name.to_owned(),
+                m.all.count.to_string(),
+                m.pictured.count.to_string(),
+                money::plain(m.all.total),
+            ]
+        }));
+        if !report.unproved.is_empty() {
+            rows.push(vec![]);
+            rows.push(vec![
+                "No bill or payment screenshot attached; paid by me".into(),
+            ]);
+            rows.extend(report.unproved.iter().map(|l| {
+                let particulars = if report.detail {
+                    safe_cell(&l.particulars)
+                } else {
+                    String::new()
+                };
+                vec![
+                    l.date.clone(),
+                    l.category.clone(),
+                    l.mode.clone(),
+                    particulars,
+                    money::plain(l.amount),
+                ]
+            }));
+            rows.push(total("Total without a picture", report.unproved_total));
+        }
+    }
     if !report.stages.is_empty() {
         rows.push(vec![]);
         rows.push(vec!["Stage of the trip".into(), "Amount (INR)".into()]);

@@ -1,4 +1,4 @@
-import { Building2, Database, Download, FileUp, Luggage, Pencil, Plus, RefreshCw, Route, Settings, User, Users, Zap } from "lucide-react";
+import { Bell, Building2, Database, Download, FileUp, Luggage, Pencil, Plus, RefreshCw, Route, Settings, User, Users, Zap } from "lucide-react";
 import { useRef, useState, type ChangeEvent } from "react";
 import { api, saveFile, today } from "../api";
 import { Badge, Button, Card, EmptyState, Input, List, ListRow, Money, PageHeader, Segmented, Select, Toggle } from "../components/ui";
@@ -18,6 +18,7 @@ const back = { href: "#/more", label: "More" };
 export function More() {
   const { data, sync } = useApp();
   const updating = useUpdate();
+  const { preferences } = usePreferences();
   const current = data.companies.find((c) => c.id === data.profile.company_id);
   const steps = [
     { done: !!data.profile.name, title: "Add your details", href: "#/more/profile" },
@@ -52,6 +53,7 @@ export function More() {
       <Card title="This app">
         <List>
           <ListRow icon={RefreshCw} title="Sync" detail={sync?.enabled ? `On · ${sync.peers.length} linked` : "Off"} href="#/more/sync" />
+          <ListRow icon={Bell} title="Notifications" detail={preferences.reminders ? "EMI reminders on" : "Off"} href="#/more/notifications" />
           <ListRow icon={Database} title="Backup and import" href="#/more/data" />
           <ListRow icon={Settings} title="Appearance" href="#/more/appearance" />
           {updating && (
@@ -61,8 +63,10 @@ export function More() {
               detail={
                 updating.phase === "ready"
                   ? `${updating.version} ready to install`
-                  : updating.phase === "available"
-                    ? `${updating.version} is out`
+                  : updating.phase === "needs_permission"
+                    ? "Waiting for your permission"
+                    : updating.phase === "available"
+                      ? `${updating.version} is out`
                     : `Version ${updating.current}`
               }
               href="#/more/updates"

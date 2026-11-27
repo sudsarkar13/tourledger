@@ -3,7 +3,7 @@
 //! One person's data is small, so the UI reloads a whole snapshot after each
 //! change. Revisit if a ledger ever reaches tens of thousands of entries.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use chrono::NaiveDate;
 use serde::Serialize;
@@ -13,6 +13,7 @@ use crate::insights::{self, Insights};
 use crate::loans;
 use crate::model::*;
 use crate::portfolio::{self, Portfolio};
+use crate::proof::{self, Proof};
 use crate::settlement::{self, Summary};
 use crate::store::Store;
 
@@ -40,6 +41,8 @@ pub struct TourView {
     pub summary: Summary,
     /// Where a company claim stands; empty for a personal trip.
     pub claim_state: &'static str,
+    /// How my payments were made, and which have a picture.
+    pub proof: Proof,
 }
 
 #[derive(Debug, Serialize)]
@@ -157,6 +160,11 @@ pub fn data(store: &Store, today: NaiveDate) -> Data {
     }
     orphans += transfers.iter().filter(|t| gone(&t.data.tour_id)).count();
 
+    let attached: Vec<Item<Attachment>> = load(store, ATTACHMENT);
+    let pictured: BTreeSet<&str> = attached
+        .iter()
+        .map(|a| a.data.expense_id.as_str())
+        .collect();
     let mut tours: Vec<TourView> = load::<Tour>(store, TOUR)
         .into_iter()
         .map(|t| {
@@ -170,7 +178,14 @@ pub fn data(store: &Store, today: NaiveDate) -> Data {
                     .filter(|x| x.data.tour_id == t.id)
                     .map(|x| &x.data),
             );
+            let proof = proof::summarise(
+                expenses
+                    .iter()
+                    .filter(|e| e.data.tour_id == t.id && proof::counts(t.data.kind, &e.data)),
+                &pictured,
+            );
             TourView {
+                proof,
                 claim_state: claim_state(&t.data, &summary),
                 id: t.id,
                 data: t.data,

@@ -75,6 +75,20 @@ export interface Summary {
   by_category: Record<string, number>;
 }
 
+export interface Tally {
+  count: number;
+  total: number;
+}
+
+/** How my payments on a tour were made, and which have a picture. */
+export interface Proof {
+  modes: { name: string; all: Tally; pictured: Tally }[];
+  all: Tally;
+  pictured: Tally;
+  /** Expenses still without a picture. */
+  missing: string[];
+}
+
 export interface Tour {
   id: string;
   name: string;
@@ -96,6 +110,7 @@ export interface Tour {
   local_only: boolean;
   summary: Summary;
   claim_state: ClaimState;
+  proof: Proof;
 }
 
 export interface Expense {
@@ -314,6 +329,7 @@ export interface Draft {
   mode: string;
   paid_by: string;
   claim: Claim;
+  payment_method: string;
   split_with: string[];
   bill_no: string;
   warnings: string[];
@@ -327,6 +343,7 @@ export interface ReportLine {
   particulars: string;
   people: string;
   paid_by: string;
+  mode: string;
   bill_no: string;
   amount: number;
   bills: number[];
@@ -346,10 +363,17 @@ export interface Report {
   left_out_count: number;
   left_out_total: number;
   money: [string, string, number][];
-  bills: { number: number; hash: string; label: string }[];
+  bills: { number: number; hash: string; label: string; present: boolean }[];
   stages: { name: string; total: number }[];
   check: { id: string; particulars: string; amount: number; filed: string; suggested: string }[];
   without_bill: number;
+  proof: boolean;
+  proof_summary: Proof;
+  unproved: ReportLine[];
+  unproved_total: number;
+  statement: string;
+  declared_by: string;
+  declared_on: string;
   allowance: number;
   by_person: [string, number][];
   advance: number;

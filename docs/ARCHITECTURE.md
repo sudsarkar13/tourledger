@@ -153,6 +153,22 @@ it is about money, and refuses a line whose payer is a name it does not know.
 Tour figures (`insights`) and loan figures (`portfolio`) are computed separately;
 no loan value enters a tour total, reminder or estimate.
 
+## Reminders
+
+`core::reminders` lists which unpaid instalments to mention and on which day; the
+settings and the showing belong to each device and are never synced.
+
+- **Android:** the coming reminders (at most 50, up to two months ahead) are handed to
+  the system, and the whole set is replaced whenever the ledger or the settings
+  change. They may arrive late: exact alarms are not asked for.
+  - They go through the notification plugin's `batch` command. Its `notify` records
+    nothing, so what it schedules cannot be cancelled or set again after a restart.
+  - Scheduled is not delivered: one still pending an hour after its time was dropped
+    (a force stop does this) and is shown when the app is next opened.
+  - `scripts/build.sh` also sets them again after the app is updated.
+- **Computers:** there is no scheduling, so they are shown while the app is open.
+- Amounts are left out unless switched on, because a locked screen shows them.
+
 ## "Connect with loan apps"
 
 Other Android apps do not expose their data, and there is no public interface a
