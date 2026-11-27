@@ -131,3 +131,7 @@ is encrypted by the app. Keep disk encryption on, and make backups from
 
 More: [architecture](docs/ARCHITECTURE.md) · [scenarios](docs/SCENARIOS.md) ·
 [design rules](docs/DESIGN.md)
+
+## License
+
+[MIT](LICENSE)
