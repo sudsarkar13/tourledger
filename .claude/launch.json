@@ -1,0 +1,17 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "bridge",
+      "runtimeExecutable": "cargo",
+      "runtimeArgs": ["run", "-q", "-p", "tourledger-devbridge", "--", "dev-data", "4777"],
+      "port": 4777
+    },
+    {
+      "name": "ui",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": ["--dir", "ui", "dev"],
+      "port": 1420
+    }
+  ]
+}

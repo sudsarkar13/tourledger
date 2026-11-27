@@ -1,0 +1,12 @@
+target/
+node_modules/
+dist/
+.DS_Store
+*.log
+*.tlg
+*.tlg.torn*
+dev-data*/
+src-tauri/gen/
+*.keystore
+*.jks
+keystore.properties

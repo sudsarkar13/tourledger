@@ -1,0 +1,21 @@
+[package]
+name = "tourledger-sync"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+tourledger-core = { path = "../core" }
+serde.workspace = true
+serde_json.workspace = true
+chrono.workspace = true
+thiserror.workspace = true
+data-encoding = "2"
+iroh = "1.5"
+iroh-mdns-address-lookup = "0.6"
+n0-future = "0.3"
+rand = "0.9"
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync", "time", "io-util"] }
+
+[dev-dependencies]
+tempfile.workspace = true

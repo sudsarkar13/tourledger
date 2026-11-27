@@ -1,0 +1,13 @@
+[package]
+name = "tourledger-devbridge"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+
+[dependencies]
+tourledger-sync = { path = "../sync" }
+tourledger-core = { path = "../core" }
+serde_json.workspace = true
+tiny_http = "0.12"
+tokio = { version = "1", features = ["rt-multi-thread"] }

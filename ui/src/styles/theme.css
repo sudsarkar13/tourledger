@@ -1,0 +1,135 @@
+/* The only place colours, spacing, radii and type sizes are defined. */
+:root {
+  color-scheme: light;
+
+  --bg: #eef1f8;
+  --glow-1: #b9cdfb;
+  --glow-2: #bfe8dc;
+  --glow-3: #e7d3f7;
+  --surface: rgb(255 255 255 / 0.78);
+  --surface-solid: #ffffff;
+  --glass: rgb(255 255 255 / 0.62);
+  --edge: rgb(255 255 255 / 0.7);
+  --line: rgb(18 28 52 / 0.11);
+  --field: #ffffff;
+  --field-line: rgb(18 28 52 / 0.26);
+
+  --text: #131a2b;
+  --muted: #525c74;
+  --accent: #2458c5;
+  --accent-text: #ffffff;
+  --accent-soft: rgb(36 88 197 / 0.12);
+  --series: #2a78d6;
+  --good: #0b6b37;
+  --warn: #855800;
+  --bad: #b3261e;
+
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+
+  --radius-s: 10px;
+  --radius-m: 16px;
+  --radius-l: 24px;
+
+  --font: system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans", sans-serif;
+  --text-s: 0.8125rem;
+  --text-m: 0.9375rem;
+  --text-l: 1.0625rem;
+  --text-xl: 1.5rem;
+
+  --target: 44px;
+  --nav-width: 220px;
+  --shadow: 0 8px 28px rgb(25 40 80 / 0.1);
+  --blur: blur(18px) saturate(160%);
+  --fast: 160ms;
+  /* Page and launch motion; --stagger is the gap between one card and the next. */
+  --page: 280ms;
+  --stagger: 45ms;
+  --spin: 1.2s;
+  --ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --bg: #0c101a;
+    --glow-1: #1d2f66;
+    --glow-2: #0f3d3a;
+    --glow-3: #35204f;
+    --surface: rgb(28 34 50 / 0.76);
+    --surface-solid: #1a2030;
+    --glass: rgb(24 30 46 / 0.64);
+    --edge: rgb(255 255 255 / 0.09);
+    --line: rgb(255 255 255 / 0.1);
+    --field: #141a28;
+    --field-line: rgb(255 255 255 / 0.26);
+    --text: #edf0f8;
+    --muted: #a8b1c7;
+    --accent: #8fb1ff;
+    --accent-text: #0b1530;
+    --accent-soft: rgb(143 177 255 / 0.16);
+    --series: #3987e5;
+    --good: #5fd39a;
+    --warn: #f0c05a;
+    --bad: #ff8e85;
+    --shadow: 0 8px 28px rgb(0 0 0 / 0.35);
+  }
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #0c101a;
+  --glow-1: #1d2f66;
+  --glow-2: #0f3d3a;
+  --glow-3: #35204f;
+  --surface: rgb(28 34 50 / 0.76);
+  --surface-solid: #1a2030;
+  --glass: rgb(24 30 46 / 0.64);
+  --edge: rgb(255 255 255 / 0.09);
+  --line: rgb(255 255 255 / 0.1);
+  --field: #141a28;
+  --field-line: rgb(255 255 255 / 0.26);
+  --text: #edf0f8;
+  --muted: #a8b1c7;
+  --accent: #8fb1ff;
+  --accent-text: #0b1530;
+  --accent-soft: rgb(143 177 255 / 0.16);
+  --series: #3987e5;
+  --good: #5fd39a;
+  --warn: #f0c05a;
+  --bad: #ff8e85;
+  --shadow: 0 8px 28px rgb(0 0 0 / 0.35);
+}
+
+/* "Reduce effects": solid panels, no blur, no motion. */
+:root.reduced {
+  --surface: var(--surface-solid);
+  --glass: var(--surface-solid);
+  --blur: none;
+  --shadow: none;
+  --fast: 0ms;
+  --page: 0ms;
+  --stagger: 0ms;
+  --spin: 0s;
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  :root {
+    --surface: var(--surface-solid) !important;
+    --glass: var(--surface-solid) !important;
+    --blur: none !important;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --fast: 0ms !important;
+    --page: 0ms !important;
+    --stagger: 0ms !important;
+    --spin: 0s !important;
+  }
+}
