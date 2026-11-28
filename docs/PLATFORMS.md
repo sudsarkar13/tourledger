@@ -9,7 +9,6 @@ One codebase. What has actually been done for each system, as of 27 November 202
 | Windows x64, arm64 | CI, or `scripts/build.sh` on Windows | Yes, in CI | No; the core tests pass on x64 |
 | Linux x64, arm64 (deb, rpm, AppImage) | CI, or `scripts/build.sh` on Linux | Yes, in CI | No; the core tests pass on x64 |
 | Android (ARM, 64 and 32-bit) | `scripts/build.sh android-release`, then `scripts/sign-android.sh` | Yes, signed release APK | A release build on an Android 16 emulator: launch, preview, backup and restore, QR scanner opening. Not on a real phone; sync and reading a code not tried |
-| iOS, iPadOS | `scripts/build.sh ios` (simulator), or CI | Simulator build only, in CI | No |
 | FreeBSD | CI (experimental) | Compiles in CI | No |
 
 CI runs for version tags and when started by hand.
@@ -37,15 +36,12 @@ updated again. The updater key was set up with `scripts/setup-update-key.sh`.
 
 | System | Still missing |
 |---|---|
-| iOS | An Apple Developer account for real devices and the App Store |
 | macOS | An Apple Developer ID to sign and notarise, so users see a warning |
 | Windows | A code-signing certificate, so users see a warning |
 
-iOS also needs Apple's multicast networking entitlement before devices can find
-each other on Wi-Fi; until then it would sync over the internet only.
-
 ## Not covered
 
+- **iPhone and iPad:** not supported and not planned.
 - **FreeBSD:** the window toolkit support is community-maintained; treat as
   experimental until it has been run on a real system.
 - **OpenBSD, NetBSD and others:** no recipe. **ChromeOS** runs the Android app

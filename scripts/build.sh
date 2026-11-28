@@ -6,7 +6,6 @@
 #   scripts/build.sh android --target aarch64    only for 64-bit phones, faster
 #   scripts/build.sh android-release --target aarch64 armv7    for publishing;
 #                               then sign it with scripts/sign-android.sh
-#   scripts/build.sh ios        simulator build (needs macOS with full Xcode)
 #
 # Windows, Linux and FreeBSD builds run on those systems or in CI
 # (.github/workflows/build.yml). Nothing is uploaded or published.
@@ -111,23 +110,8 @@ case "${1:-desktop}" in
       fi
     fi
     ;;
-  ios)
-    [ -d src-tauri/gen/apple ] || "$tauri" ios init --ci
-    # The generated Xcode phase runs "node tauri" from gen/apple, which only
-    # works for a project with the CLI at its root. Send it to the one in ui/.
-    echo 'require("../../../ui/node_modules/@tauri-apps/cli/tauri.js")' > src-tauri/gen/apple/tauri.js
-    # The sync library reads the network settings through two system libraries
-    # that the generated project does not link.
-    spec=src-tauri/gen/apple/project.yml
-    if ! grep -q 'libresolv.tbd' "$spec"; then
-      perl -pi -e 's/^(\s*)- sdk: Security\.framework\n/$&$1- sdk: SystemConfiguration.framework\n$1- sdk: libresolv.tbd\n/' "$spec"
-      grep -q 'libresolv.tbd' "$spec" || { echo "Could not add the network libraries to the Xcode project." >&2; exit 1; }
-      (cd src-tauri/gen/apple && xcodegen generate)
-    fi
-    "$tauri" ios build --debug --target aarch64-sim
-    ;;
   *)
-    echo "Usage: scripts/build.sh [desktop|android|android-release|ios]" >&2
+    echo "Usage: scripts/build.sh [desktop|android|android-release]" >&2
     exit 1
     ;;
 esac

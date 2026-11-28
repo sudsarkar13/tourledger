@@ -282,9 +282,8 @@ pnpm --dir ui dev
 ```
 
 **Builds.** `scripts/build.sh` builds for the desktop system you run it on.
-`scripts/build.sh android` and `scripts/build.sh ios` need the Android SDK/NDK or full
-Xcode. CI (`.github/workflows/build.yml`) runs for version tags and when started by
-hand.
+`scripts/build.sh android` needs the Android SDK and NDK. CI
+(`.github/workflows/build.yml`) runs for version tags and when started by hand.
 
 </details>
 
