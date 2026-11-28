@@ -8,7 +8,7 @@ use crate::error::{Error, Result};
 use crate::model::*;
 use crate::settlement::COMPANY_PAYER;
 use crate::store::{Change, Record, Store};
-use crate::{blobs, entry, export, loans, message, pdf, report, share, views};
+use crate::{arrange, blobs, entry, export, loans, message, pdf, report, share, views};
 
 #[derive(Debug, Deserialize)]
 #[serde(tag = "op", rename_all = "snake_case")]
@@ -46,6 +46,11 @@ pub enum Request {
         today: String,
         lead_days: u32,
         missed: bool,
+    },
+    /// The order a tour's entries are to be listed in; none means by date.
+    ArrangeExpenses {
+        tour_id: String,
+        ids: Vec<String>,
     },
     /// Saves several expenses and company payments together, all or none.
     SaveMany {
@@ -233,6 +238,14 @@ fn prepare(store: &Store, kind: &str, id: Option<String>, body: Value) -> Result
             .filter(|i| !i.is_empty())
             .unwrap_or_else(|| uuid::Uuid::now_v7().to_string()),
     };
+    let mut body = body;
+    // The tour form does not carry the arranged order, so editing keeps it.
+    if kind == TOUR
+        && body.get("order").is_none()
+        && let Some(held) = store.get(TOUR, &id).and_then(|r| r.body.get("order"))
+    {
+        body["order"] = held.clone();
+    }
     let mut body = validate(kind, &id, &body)?;
     check_references(store, kind, &body)?;
     if kind == EXPENSE && body["tour_id"] == "" {
@@ -252,6 +265,36 @@ fn save(store: &mut Store, kind: &str, id: Option<String>, body: Value) -> Resul
     let id = change.id.clone();
     store.commit(vec![change])?;
     Ok(json!({ "id": id }))
+}
+
+fn arrange_expenses(store: &mut Store, tour_id: &str, ids: &[String]) -> Result<Value> {
+    let record = store.get(TOUR, tour_id).ok_or(Error::NotFound)?;
+    // Changed in place, so nothing else on the tour is touched.
+    let mut body = record.body.clone();
+    let order = if ids.is_empty() {
+        Vec::new()
+    } else {
+        // Only this tour's entries; one removed meanwhile is simply left out.
+        let data = views::data(store, NaiveDate::default());
+        arrange::to_store(
+            data.expenses.iter().filter(|e| e.data.tour_id == tour_id),
+            ids,
+        )
+    };
+    // Saving what is already there would still overwrite an edit not yet synced.
+    let held = body.get("order").cloned().unwrap_or_else(|| json!([]));
+    if held == json!(order) {
+        return Ok(json!({ "id": tour_id }));
+    }
+    body["order"] = json!(order);
+    validate(TOUR, tour_id, &body)?;
+    store.commit(vec![Change {
+        kind: TOUR.into(),
+        id: tour_id.to_owned(),
+        deleted: false,
+        body,
+    }])?;
+    Ok(json!({ "id": tour_id }))
 }
 
 fn save_many(store: &mut Store, items: Vec<Item>) -> Result<Value> {
@@ -692,6 +735,7 @@ pub fn handle(store: &mut Store, request: Request) -> Result<Value> {
             today: t,
         } => parse_entry(store, &text, &tour_id, today(&t)?),
         Request::SaveMany { items } => save_many(store, items),
+        Request::ArrangeExpenses { tour_id, ids } => arrange_expenses(store, &tour_id, &ids),
         Request::ClaimReport {
             tour_id,
             today: t,
@@ -1140,6 +1184,153 @@ mod tests {
         )
         .unwrap();
         assert!(csv.to_string().contains("Total without a picture"));
+    }
+
+    #[test]
+    fn a_picture_on_a_totals_only_claim_still_says_what_was_bought() {
+        let dir = tempfile::tempdir().unwrap();
+        let s = &mut Store::open(dir.path(), "a").unwrap();
+        let tour = save_one(
+            s,
+            TOUR,
+            json!({"name": "Fair", "start_date": "2026-11-14", "end_date": "2026-11-16"}),
+        );
+        let expense = save_one(
+            s,
+            EXPENSE,
+            json!({"tour_id": tour, "date": "2026-11-14", "category": "event_purchase",
+                   "amount": 45_000, "paid_by": "me", "claim": "reimbursable",
+                   "description": "Chocolates for visitors"}),
+        );
+        let picture = data_encoding::BASE64.encode(&jpeg());
+        call(
+            s,
+            json!({"op": "add_attachment", "expense_id": expense, "data": picture}),
+        )
+        .unwrap();
+        let report = call(
+            s,
+            json!({"op": "claim_report", "tour_id": tour, "today": "2026-11-27"}),
+        )
+        .unwrap();
+        assert_eq!(report["groups"][0]["name"], "Event purchases");
+        assert_eq!(
+            report["bills"][0]["label"],
+            "Bill 1: 14 Nov 2026, Event purchases, Chocolates for visitors, ₹450.00"
+        );
+    }
+
+    #[test]
+    fn a_tour_column_is_not_imported_as_the_destination() {
+        let dir = tempfile::tempdir().unwrap();
+        let s = &mut Store::open(dir.path(), "a").unwrap();
+        export::import_csv(s, "Date,Tour,Amount (INR)\n2026-11-14,Mumbai fair,250\n").unwrap();
+        let snap = call(s, json!({"op": "snapshot", "today": "2026-11-27"})).unwrap();
+        assert_eq!(snap["expenses"][0]["to"], "");
+    }
+
+    #[test]
+    fn one_fare_for_both_ways_counts_once_and_reads_as_a_round_trip() {
+        let dir = tempfile::tempdir().unwrap();
+        let s = &mut Store::open(dir.path(), "a").unwrap();
+        let tour = save_one(
+            s,
+            TOUR,
+            json!({"name": "Fair", "start_date": "2026-11-14", "end_date": "2026-11-16"}),
+        );
+        save_one(
+            s,
+            EXPENSE,
+            json!({"tour_id": tour, "date": "2026-11-14", "category": "train", "amount": 50_000,
+                   "paid_by": "me", "claim": "reimbursable", "from": "Cuttack", "to": "Puri",
+                   "round_trip": true}),
+        );
+        let report = call(
+            s,
+            json!({"op": "claim_report", "tour_id": tour, "today": "2026-11-27", "detail": true}),
+        )
+        .unwrap();
+        assert_eq!(report["total"], 50_000);
+        assert_eq!(
+            report["groups"][0]["lines"][0]["particulars"],
+            "Cuttack → Puri → Cuttack"
+        );
+    }
+
+    #[test]
+    fn entries_arranged_by_hand_are_listed_that_way_on_the_report() {
+        let dir = tempfile::tempdir().unwrap();
+        let s = &mut Store::open(dir.path(), "a").unwrap();
+        let tour_body =
+            json!({"name": "Fair", "start_date": "2026-11-14", "end_date": "2026-11-16"});
+        let tour = save_one(s, TOUR, tour_body.clone());
+        let add = |s: &mut Store, date: &str, category: &str, note: &str| {
+            save_one(
+                s,
+                EXPENSE,
+                json!({"tour_id": tour, "date": date, "category": category, "amount": 100,
+                       "paid_by": "me", "claim": "reimbursable", "description": note}),
+            )
+        };
+        let a = add(s, "2026-11-14", "local", "A");
+        let b = add(s, "2026-11-14", "train", "B");
+        let c = add(s, "2026-11-15", "local", "C");
+        let tea = add(s, "2026-11-14", "food", "Tea");
+        let dinner = add(s, "2026-11-15", "food", "Dinner");
+
+        let listed = |s: &mut Store| {
+            let report = call(
+                s,
+                json!({"op": "claim_report", "tour_id": tour, "today": "2026-11-27", "detail": true}),
+            )
+            .unwrap();
+            report["groups"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .flat_map(|g| g["lines"].as_array().unwrap().clone())
+                .map(|l| l["particulars"].as_str().unwrap().to_owned())
+                .collect::<Vec<_>>()
+                .join(" ")
+        };
+        let stored = |s: &mut Store| s.get(TOUR, &tour).unwrap().body["order"].clone();
+        let arrange = |s: &mut Store, ids: &[&String]| {
+            call(
+                s,
+                json!({"op": "arrange_expenses", "tour_id": tour, "ids": ids}),
+            )
+            .unwrap();
+        };
+        assert_eq!(listed(s), "A B C Tea Dinner");
+
+        // The train first; food is left as it was, so it is not recorded.
+        arrange(s, &[&b, &a, &c, &tea, &dinner]);
+        assert_eq!(listed(s), "B A C Tea Dinner");
+        assert_eq!(stored(s), json!([b, a, c]));
+
+        // One added later goes by its date, and editing the tour keeps the order.
+        add(s, "2026-11-14", "local", "D");
+        call(
+            s,
+            json!({"op": "save", "kind": "tour", "id": tour, "body": tour_body}),
+        )
+        .unwrap();
+        assert_eq!(listed(s), "B A D C Tea Dinner");
+
+        // Another tour's entry, or one since deleted, is not taken in.
+        arrange(s, &[&c, &"nothing".to_owned(), &b, &a]);
+        assert!(!stored(s).to_string().contains("nothing"));
+        assert!(listed(s).starts_with("C B A"));
+
+        // Nothing changed: the tour is not written again.
+        let revision = s.revision();
+        let kept: Vec<String> = serde_json::from_value(stored(s)).unwrap();
+        arrange(s, &kept.iter().collect::<Vec<_>>());
+        assert_eq!(s.revision(), revision);
+
+        arrange(s, &[]);
+        assert_eq!(stored(s), json!([]));
+        assert_eq!(listed(s), "A B D C Tea Dinner");
     }
 
     #[test]

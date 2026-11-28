@@ -142,6 +142,21 @@ net < 0   I owe the company
 Company-paid items (for example, rail tickets) count in the tour's total cost but
 never in the claim. Colleague-paid items are in neither claim nor my spending.
 
+## Arranged entries
+
+A tour records the order chosen for its report as a list of expense ids (`order`).
+It is on the tour, not on the entries, so that arranging rewrites one record and
+cannot overwrite an entry edited on another device. Only headings arranged by hand
+are listed; the rest follow the dates (`core::arrange`).
+
+A version before 0.1.5 keeps the field when it only passes the record on, and drops
+it if the tour is edited there.
+
+## Links out of the app
+
+Only the About page opens anything outside, through Tauri's opener, and only the
+addresses listed in `src-tauri/capabilities/default.json`.
+
 ## Typed lines
 
 `core::entry` reads one line per item with fixed rules. It never saves: the person

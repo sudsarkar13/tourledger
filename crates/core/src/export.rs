@@ -8,7 +8,7 @@ use crate::settlement::COMPANY_PAYER;
 use crate::store::{Change, Store};
 use crate::views::Data;
 
-pub const CATEGORY_NAMES: [(&str, &str); 13] = [
+pub const CATEGORY_NAMES: [(&str, &str); 14] = [
     ("local", "Local transport"),
     ("metro", "Metro"),
     ("train", "Train"),
@@ -17,6 +17,7 @@ pub const CATEGORY_NAMES: [(&str, &str); 13] = [
     ("food", "Food and refreshments"),
     ("lodging", "Lodging"),
     ("event", "Event and tickets"),
+    ("event_purchase", "Event purchases"),
     ("fuel", "Fuel, parking, toll"),
     ("phone", "Phone and internet"),
     ("shopping", "Shopping"),
@@ -62,13 +63,6 @@ pub(crate) fn payer_name(data: &Data, id: &str) -> String {
             .iter()
             .find(|p| p.id == id)
             .map_or_else(|| "Removed person".into(), |p| p.data.name.clone()),
-    }
-}
-
-fn route(e: &Expense) -> String {
-    match (e.from.is_empty(), e.to.is_empty()) {
-        (true, true) => String::new(),
-        _ => format!("{} → {}", e.from, e.to),
     }
 }
 
@@ -124,7 +118,7 @@ fn row(data: &Data, e: &Expense) -> Vec<String> {
         safe_cell(tour),
         category_name(&e.category).to_owned(),
         safe_cell(&e.description),
-        safe_cell(&route(e)),
+        safe_cell(&e.route()),
         safe_cell(&e.mode),
         safe_cell(&payer_name(data, &e.paid_by)),
         claim_label(e).to_owned(),
@@ -261,16 +255,11 @@ pub fn report_csv(report: &Report) -> Result<String> {
                 "No bill or payment screenshot attached; paid by me".into(),
             ]);
             rows.extend(report.unproved.iter().map(|l| {
-                let particulars = if report.detail {
-                    safe_cell(&l.particulars)
-                } else {
-                    String::new()
-                };
                 vec![
                     l.date.clone(),
                     l.category.clone(),
                     l.mode.clone(),
-                    particulars,
+                    safe_cell(&l.particulars),
                     money::plain(l.amount),
                 ]
             }));
@@ -314,7 +303,13 @@ pub fn import_csv(store: &mut Store, content: &str) -> Result<usize> {
         .iter()
         .map(str::to_lowercase)
         .collect();
-    let column = |name: &str| headers.iter().position(|h| h.starts_with(name));
+    // "from" and "to" must be the whole name: "Tour" also begins with "to".
+    let column = |name: &str| {
+        headers.iter().position(|h| match name {
+            "from" | "to" => h == name,
+            _ => h.starts_with(name),
+        })
+    };
     let (Some(date_col), Some(amount_col)) = (column("date"), column("amount")) else {
         return Err(Error::msg(
             "The first row needs the column names date and amount.",

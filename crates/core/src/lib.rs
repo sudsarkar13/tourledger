@@ -2,6 +2,7 @@
 //! No network and no UI code lives here.
 
 pub mod api;
+pub mod arrange;
 pub mod blobs;
 pub mod entry;
 pub mod error;

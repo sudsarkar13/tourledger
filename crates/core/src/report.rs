@@ -6,6 +6,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use chrono::NaiveDate;
 use serde::Serialize;
 
+use crate::arrange::{self, HEADINGS};
 use crate::entry;
 use crate::export::{category_name, payer_name};
 use crate::model::{Expense, ME, Tour, TourKind, TransferKind};
@@ -13,18 +14,6 @@ use crate::money;
 use crate::proof::Proof;
 use crate::settlement::{COMPANY_PAYER, is_reimbursable};
 use crate::views::{Data, TourView};
-
-/// Heading, and the categories filed under it.
-const HEADINGS: [(&str, &[&str]); 5] = [
-    (
-        "Travelling expenses",
-        &["local", "metro", "train", "flight", "bus", "fuel"],
-    ),
-    ("Food and refreshments", &["food"]),
-    ("Stay", &["lodging"]),
-    ("Event and tickets", &["event"]),
-    ("Miscellaneous", &["phone", "shopping", "medical", "other"]),
-];
 
 #[derive(Debug, Clone, Serialize)]
 pub struct Line {
@@ -139,21 +128,28 @@ fn readable(iso: &str) -> String {
         .map_or_else(|_| iso.to_owned(), |d| d.format("%-d %b %Y").to_string())
 }
 
-fn route(e: &Expense) -> String {
-    if e.from.is_empty() || e.to.is_empty() {
+fn particulars(e: &Expense) -> String {
+    // A route needs both ends to be worth printing.
+    let route = if e.from.is_empty() || e.to.is_empty() {
         String::new()
     } else {
-        format!("{} → {}", e.from, e.to)
-    }
-}
-
-fn particulars(e: &Expense) -> String {
-    let mut parts: Vec<String> = [e.description.clone(), route(e), e.mode.clone()]
+        e.route()
+    };
+    // Said in words where there is no route to show it.
+    let both_ways = if e.round_trip && route.is_empty() {
+        "both ways".to_owned()
+    } else {
+        String::new()
+    };
+    let mut parts: Vec<String> = [e.description.clone(), route, e.mode.clone()]
         .into_iter()
         .filter(|p| !p.is_empty())
         .collect();
     if parts.is_empty() {
         parts.push(category_name(&e.category).to_owned());
+    }
+    if !both_ways.is_empty() {
+        parts.push(both_ways);
     }
     if !e.currency.is_empty() && e.currency != "INR" {
         parts.push(format!("{} {}", e.currency, money::indian(e.amount)));
@@ -210,6 +206,18 @@ fn statement(is_claim: bool) -> String {
     }
 }
 
+/// What a picture is proof of. It says what was bought even when the report gives
+/// only totals, or the person reading it cannot tell what it supports.
+fn caption(number: u32, line: &Line, under: &str) -> String {
+    let mut parts = vec![readable(&line.date), under.to_owned()];
+    // With no note, the particulars are only the category over again.
+    if line.particulars != line.category && line.particulars != under {
+        parts.push(line.particulars.clone());
+    }
+    parts.push(format!("₹{}", money::indian(line.amount)));
+    format!("Bill {number}: {}", parts.join(", "))
+}
+
 /// `detail` adds every entry; without it only totals by category are handed over.
 /// `proof` adds how each payment was made and names those with no picture.
 pub fn build(data: &Data, tour: &TourView, detail: bool, proof: bool, today: NaiveDate) -> Report {
@@ -217,12 +225,14 @@ pub fn build(data: &Data, tour: &TourView, detail: bool, proof: bool, today: Nai
     let is_claim = t.kind == TourKind::Company;
     let company = data.companies.iter().find(|c| c.id == t.company_id);
 
-    let mut expenses: Vec<_> = data
-        .expenses
-        .iter()
-        .filter(|e| e.data.tour_id == tour.id)
-        .collect();
-    expenses.sort_by(|a, b| (&a.data.date, &a.id).cmp(&(&b.data.date, &b.id)));
+    // Under each heading, in the order the lines are to be listed.
+    let expenses: Vec<_> = arrange::sections(
+        data.expenses.iter().filter(|e| e.data.tour_id == tour.id),
+        &t.order,
+    )
+    .into_iter()
+    .flat_map(|(_, entries)| entries)
+    .collect();
 
     let mut groups: Vec<Group> = HEADINGS
         .iter()
@@ -252,10 +262,7 @@ pub fn build(data: &Data, tour: &TourView, detail: bool, proof: bool, today: Nai
             amount: e.home,
             bills: Vec::new(),
         };
-        let at = HEADINGS
-            .iter()
-            .position(|(_, categories)| categories.contains(&x.category.as_str()))
-            .unwrap_or(HEADINGS.len() - 1);
+        let at = arrange::heading_of(&x.category);
         let group = &mut groups[at];
         if !is_claim || (x.paid_by == ME && is_reimbursable(x)) {
             // Shared equally between those it was spent for; mine if unsaid.
@@ -300,21 +307,7 @@ pub fn build(data: &Data, tour: &TourView, detail: bool, proof: bool, today: Nai
                 bills.push(Bill {
                     number,
                     hash: a.data.hash.clone(),
-                    label: if detail {
-                        format!(
-                            "Bill {number}: {}, {}, {}, ₹{}",
-                            readable(&line.date),
-                            line.category,
-                            line.particulars,
-                            money::indian(line.amount)
-                        )
-                    } else {
-                        format!(
-                            "Bill {number}: {}, {heading}, ₹{}",
-                            readable(&line.date),
-                            money::indian(line.amount)
-                        )
-                    },
+                    label: caption(number, line, if detail { &line.category } else { &heading }),
                     width: a.data.width,
                     height: a.data.height,
                     full_page: a.data.full_page,
@@ -341,7 +334,10 @@ pub fn build(data: &Data, tour: &TourView, detail: bool, proof: bool, today: Nai
                 })
         })
         .collect();
-    unproved.sort_by(|a, b| (&a.date, &a.id).cmp(&(&b.date, &b.id)));
+    // By date, unless an order was chosen: then as the report lists them.
+    if t.order.is_empty() {
+        unproved.sort_by(|a, b| (&a.date, &a.id).cmp(&(&b.date, &b.id)));
+    }
 
     let mut transfers: Vec<_> = data
         .transfers

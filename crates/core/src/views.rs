@@ -9,6 +9,7 @@ use chrono::NaiveDate;
 use serde::Serialize;
 use serde::de::DeserializeOwned;
 
+use crate::arrange::{self, Section};
 use crate::insights::{self, Insights};
 use crate::loans;
 use crate::model::*;
@@ -43,6 +44,8 @@ pub struct TourView {
     pub claim_state: &'static str,
     /// How my payments were made, and which have a picture.
     pub proof: Proof,
+    /// Its entries under the report's headings, in the order listed there.
+    pub sections: Vec<Section>,
 }
 
 #[derive(Debug, Serialize)]
@@ -184,7 +187,18 @@ pub fn data(store: &Store, today: NaiveDate) -> Data {
                     .filter(|e| e.data.tour_id == t.id && proof::counts(t.data.kind, &e.data)),
                 &pictured,
             );
+            let sections = arrange::sections(
+                expenses.iter().filter(|e| e.data.tour_id == t.id),
+                &t.data.order,
+            )
+            .into_iter()
+            .map(|(name, entries)| Section {
+                name,
+                ids: entries.iter().map(|e| e.id.clone()).collect(),
+            })
+            .collect();
             TourView {
+                sections,
                 proof,
                 claim_state: claim_state(&t.data, &summary),
                 id: t.id,

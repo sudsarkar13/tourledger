@@ -62,14 +62,20 @@ whether it works.
   saves only after the person confirms. Rules, not AI. The full form is always
   available.
 - Every number has a label saying what it counts.
-- A claim lists totals by category unless "Every entry" is chosen; item names,
-  dates and payers appear only in the detailed form. It names me by my profile
-  name, and shows "Both" when two travellers shared a cost.
+- A claim lists totals by category unless "Every entry" is chosen; entries and
+  payers are listed only in the detailed form. The caption under each bill picture
+  always says what was bought, or the reader cannot tell what it proves. The claim
+  names me by my profile name, and shows "Both" when two travellers shared a cost.
+- Things bought for an event are "Event purchases", with a heading of their own,
+  never Miscellaneous.
 - A claim has no signature or approval boxes: it is only submitted.
 - Dates are always `DateField`: a large calendar with month and year choice, the
   tour's days marked. Never the system date input.
-- A journey can save its return in the same step: a second entry with From and To
-  swapped, its own fare and date.
+- A journey can include its return in the same step: either one fare for both ways
+  (one entry, listed A → B → A; offered first, as it never adds money by itself), or a
+  second entry with From and To swapped, its own fare and date.
+- Entries are put in order in a Sheet that shows them as the report does, under its
+  headings. A drag handle moves a row, by touch, mouse or keyboard.
 - A new expense's category follows its note until picked by hand. A saved
   category is only changed when the person presses a button to do it.
 - Forms validate on submit; the message shows under the field, in words that say

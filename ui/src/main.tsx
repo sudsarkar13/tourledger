@@ -16,6 +16,7 @@ import { Sync } from "./pages/Sync";
 import { TourDetail } from "./pages/TourDetail";
 import { Tours } from "./pages/Tours";
 import { UpdatePrompt, Updates } from "./pages/Updates";
+import { About } from "./pages/About";
 import { Notifications, Reminders } from "./pages/Notifications";
 import { applyPreferences } from "./preferences";
 import { useRoute } from "./router";
@@ -65,6 +66,8 @@ function Page({ section, id, extra }: { section: string; id?: string; extra?: st
           return <Updates />;
         case "notifications":
           return <Notifications />;
+        case "about":
+          return <About />;
         default:
           return <More />;
       }

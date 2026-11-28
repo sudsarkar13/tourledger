@@ -43,9 +43,21 @@ pub const MAX_BILLS_PER_EXPENSE: usize = 10;
 /// The id that stands for the owner of the app in splits and payers.
 pub const ME: &str = "me";
 
-pub const CATEGORIES: [&str; 13] = [
-    "local", "metro", "train", "flight", "bus", "food", "lodging", "event", "fuel", "phone",
-    "shopping", "medical", "other",
+pub const CATEGORIES: [&str; 14] = [
+    "local",
+    "metro",
+    "train",
+    "flight",
+    "bus",
+    "food",
+    "lodging",
+    "event",
+    "event_purchase",
+    "fuel",
+    "phone",
+    "shopping",
+    "medical",
+    "other",
 ];
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -107,6 +119,9 @@ pub struct QuickEntry {
     pub mode: String,
     pub amount: i64,
     pub claim: Claim,
+    /// The amount covers the way back too.
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub round_trip: bool,
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -149,6 +164,8 @@ pub struct Tour {
     pub submitted_on: String,
     pub notes: String,
     pub local_only: bool,
+    /// Expense ids in the order chosen for the report; empty means by date.
+    pub order: Vec<String>,
 }
 
 pub const PURPOSES: [&str; 3] = ["business", "wellness", "reward"];
@@ -184,9 +201,23 @@ pub struct Expense {
     /// Who shares the cost: `me` and/or person ids. Empty means not shared.
     pub split_with: Vec<String>,
     pub local_only: bool,
+    /// A journey whose one amount covers the way back too.
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub round_trip: bool,
 }
 
 impl Expense {
+    /// "A → B", or "A → B → A" when the way back is included; empty with no ends.
+    pub fn route(&self) -> String {
+        match (self.from.is_empty(), self.to.is_empty()) {
+            (true, true) => String::new(),
+            (false, false) if self.round_trip => {
+                format!("{} → {} → {}", self.from, self.to, self.from)
+            }
+            _ => format!("{} → {}", self.from, self.to),
+        }
+    }
+
     pub fn home_amount(&self) -> i64 {
         if self.currency.is_empty() || self.currency == "INR" {
             self.amount
@@ -401,6 +432,11 @@ pub fn validate(kind: &str, id: &str, body: &Value) -> Result<Value> {
             }
             if !t.purpose.is_empty() && !PURPOSES.contains(&t.purpose.as_str()) {
                 return Err(Error::invalid("purpose", "Pick the purpose."));
+            }
+            if t.order.len() > crate::arrange::MAX_ARRANGED
+                || t.order.iter().any(|id| id.len() > 64)
+            {
+                return Err(Error::msg("Too many entries to arrange."));
             }
             not_negative("budget", t.budget)
         }),

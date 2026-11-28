@@ -6,6 +6,16 @@
   "permissions": [
     "core:default",
     "notification:default",
+    {
+      "identifier": "opener:allow-open-url",
+      "allow": [
+        { "url": "https://github.com/sudsarkar13" },
+        { "url": "https://github.com/sudsarkar13/tourledger" },
+        { "url": "https://github.com/sudsarkar13/tourledger/*" },
+        { "url": "https://www.sudeeptasarkar.in/" },
+        { "url": "https://www.linkedin.com/in/sudeepta-sarkar" }
+      ]
+    },
     "allow-api",
     "allow-save-file",
     "allow-update-status",

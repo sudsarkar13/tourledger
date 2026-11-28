@@ -575,11 +575,9 @@ fn declaration(report: &Report, layout: &mut Layout) {
             line.category,
             line.mode
         );
-        // A totals-only report keeps what was bought to itself.
-        if report.detail {
-            label.push_str("  ·  ");
-            label.push_str(&line.particulars);
-        }
+        // What was bought, so that it can be approved without a picture.
+        label.push_str("  ·  ");
+        label.push_str(&line.particulars);
         layout.long_amount_row(&label, line.amount);
         layout.rule(220);
     }

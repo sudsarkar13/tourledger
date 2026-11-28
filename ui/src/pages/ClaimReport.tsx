@@ -2,6 +2,7 @@
 import { Download, FileSpreadsheet, ReceiptText } from "lucide-react";
 import { useEffect, useState } from "react";
 import { api, saveFile, today } from "../api";
+import { Arrange } from "../components/Arrange";
 import { ReportPreview } from "../components/ReportPreview";
 import { Button, Card, EmptyState, List, ListRow, Money, PageHeader, Segmented, Toggle } from "../components/ui";
 import { day, fullDay, money } from "../format";
@@ -82,11 +83,13 @@ export function ClaimReport({ id }: { id: string }) {
   const back = { href: `#/tours/${id}`, label: "Tour" };
   if (!report) return <PageHeader title="Report" back={back} />;
   const claimed = report.groups.filter((g) => g.lines.length);
+  const tour = data.tours.find((t) => t.id === id);
   const away = report.bills.filter((b) => !b.present).length;
 
   return (
     <>
       <PageHeader title={report.title} back={back} context={[report.company, report.tour].filter(Boolean).join(" · ")}>
+        {tour && <Arrange key={id} tour={tour} />}
         <Button icon={FileSpreadsheet} disabled={busy} onClick={() => download("csv")}>
           Spreadsheet
         </Button>
@@ -273,8 +276,8 @@ export function ClaimReport({ id }: { id: string }) {
             {report.unproved.map((l) => (
               <ListRow
                 key={l.id}
-                title={detail ? l.particulars : l.category}
-                detail={`${day(l.date)} · ${l.mode}`}
+                title={l.particulars}
+                detail={`${day(l.date)} · ${l.category} · ${l.mode}`}
                 value={<Money paise={l.amount} />}
               />
             ))}

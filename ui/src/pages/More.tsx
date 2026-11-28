@@ -1,4 +1,4 @@
-import { Bell, Building2, Database, Download, FileUp, Luggage, Pencil, Plus, RefreshCw, Route, Settings, User, Users, Zap } from "lucide-react";
+import { Bell, Building2, Database, Download, FileUp, Info, Luggage, Pencil, Plus, RefreshCw, Route, Settings, User, Users, Zap } from "lucide-react";
 import { useRef, useState, type ChangeEvent } from "react";
 import { api, saveFile, today } from "../api";
 import { Badge, Button, Card, EmptyState, Input, List, ListRow, Money, PageHeader, Segmented, Select, Toggle } from "../components/ui";
@@ -72,6 +72,7 @@ export function More() {
               href="#/more/updates"
             />
           )}
+          <ListRow icon={Info} title="About" detail="TourLedger and its developer" href="#/more/about" />
         </List>
       </Card>
     </>

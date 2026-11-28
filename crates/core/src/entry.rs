@@ -499,6 +499,31 @@ fn category_among<'a>(words: impl Iterator<Item = &'a str> + Clone) -> Option<&'
         .map(|(id, _)| *id)
 }
 
+/// "chocolates for the event", "event purchase": bought for the event, unless a
+/// word says it is something else.
+fn bought_for_event<'a>(
+    words: impl Iterator<Item = &'a str> + Clone,
+    found: Option<&'static str>,
+) -> Option<&'static str> {
+    let all: Vec<&str> = words.collect();
+    let said = (0..all.len()).any(|i| {
+        let next = |n: usize| all.get(i + n).copied().unwrap_or("");
+        let what = if next(1) == "the" { next(2) } else { next(1) };
+        (all[i] == "for" && ["event", "expo", "booth"].contains(&what))
+            || (all[i] == "event" && ["purchase", "purchases"].contains(&next(1)))
+    });
+    let paid_to_attend = all
+        .iter()
+        .any(|w| ["ticket", "tickets", "fee", "fees", "rent", "booking"].contains(w));
+    match found {
+        // A ticket or a fee for it is the price of attending, not a purchase.
+        None | Some("other" | "shopping") if said && paid_to_attend => Some("event"),
+        None | Some("other" | "shopping") if said => Some("event_purchase"),
+        // Anything else a word says, such as food or a ride, stands.
+        _ => found,
+    }
+}
+
 /// The category a note such as "powder tea in train" belongs to, if any word
 /// says. A vehicle with a "to" is a ride, whatever it passes by.
 pub fn categorise(text: &str) -> Option<&'static str> {
@@ -512,7 +537,8 @@ pub fn categorise(text: &str) -> Option<&'static str> {
     {
         return Some(category);
     }
-    category_among(low.iter().map(String::as_str))
+    let words = || low.iter().map(String::as_str);
+    bought_for_event(words(), category_among(words()))
 }
 
 /// The vehicle a line names, preferring anything over the metro.
@@ -912,7 +938,10 @@ pub fn parse_line(line: &str, context: &Context) -> Draft {
     let mode = mode_among(&free);
     let category = ride_category(mode)
         .filter(|_| free.iter().any(|f| f == "to"))
-        .unwrap_or_else(|| category_among(free.iter().map(String::as_str)).unwrap_or("other"));
+        .unwrap_or_else(|| {
+            let words = || free.iter().map(String::as_str);
+            bought_for_event(words(), category_among(words())).unwrap_or("other")
+        });
     let transport = TRANSPORT.contains(&category);
     let (from, to) = if transport || category == "other" {
         find_route(&mut w)
@@ -1280,5 +1309,25 @@ mod tests {
         let advance = read("got cash 2000 from company");
         assert_eq!(advance.kind, DraftKind::Advance);
         assert_eq!(advance.payment_method, "");
+    }
+
+    #[test]
+    fn things_bought_for_the_event_are_not_miscellaneous() {
+        for note in [
+            "chocolates for event",
+            "Chocolates for the event",
+            "gifts for the booth",
+            "event purchase badges",
+        ] {
+            assert_eq!(categorise(note), Some("event_purchase"), "{note}");
+        }
+        for (note, category) in [
+            ("lunch for event team", "food"),
+            ("ticket for the event", "event"),
+            ("stall booking fee", "event"),
+            ("chocolates", "other"),
+        ] {
+            assert_eq!(categorise(note).unwrap_or("other"), category, "{note}");
+        }
     }
 }

@@ -39,7 +39,7 @@ For one person, across your own computer and phone. No account, no sign-up.
 
 ### 🧳 Track a tour as it happens
 Type `cab home to station 180` or `company gave 2000`, check what was understood, and
-save. A note picks the category. A journey there and back goes in at once. Advances,
+save. A note picks the category. A return trip goes in at once, with one fare or two. Advances,
 your own spending and what is still due stay up to date. Rules, not AI.
 
 </td>
@@ -47,8 +47,8 @@ your own spending and what is still due stay up to date. Rules, not AI.
 
 ### 🧾 Hand in a clean claim
 One tap makes a claim report grouped into travel, food, stay, event and
-miscellaneous, with bill photos four to a page. Preview it, then save a PDF or a
-spreadsheet. Personal items never appear on it.
+miscellaneous, with bill photos four to a page. Drag entries into the order you want,
+preview it, then save a PDF or a spreadsheet. Personal items never appear on it.
 
 </td>
 </tr>

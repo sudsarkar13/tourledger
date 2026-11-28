@@ -129,7 +129,9 @@ export function QuickForm({ quick, onClose }: { quick?: QuickEntry; onClose: () 
   });
   const v = form.values;
   const submit = form.submit(async () => {
-    await save("quick", { ...v, label: v.label.trim(), amount: amount("amount", v.amount) }, quick?.id);
+    // The form does not offer the round-trip mark, so it is carried over.
+    const body = { ...v, label: v.label.trim(), amount: amount("amount", v.amount), round_trip: quick?.round_trip };
+    await save("quick", body, quick?.id);
     notify("Saved");
     onClose();
   });

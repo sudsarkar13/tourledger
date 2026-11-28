@@ -3,7 +3,7 @@ import { api, ApiError, today } from "../api";
 import { BillsField } from "../components/Bills";
 import type { Picture } from "../pictures";
 import { Chips, Input, Segmented, Select, Sheet, Toggle } from "../components/ui";
-import { day, decimalInput, moneyInput, parseDecimal } from "../format";
+import { day, decimalInput, moneyInput, parseDecimal, routeOf } from "../format";
 import { CATEGORIES, categoryOptions, isWorkTrip } from "../labels";
 import { useApp } from "../state";
 import type { Claim, Expense, Tour } from "../types";
@@ -69,10 +69,16 @@ export function ExpenseForm({
   // Set once a new expense is stored, so retrying after a failed picture does
   // not create a second expense.
   const savedId = useRef(expense?.id);
-  // The way back is saved as its own entry. Its fare and date follow the first
-  // journey until they are changed.
-  const [returning, setReturning] = useState(false);
-  const [wayBack, setWayBack] = useState<{ fare: string | null; date: string | null }>({ fare: null, date: null });
+  // The way back is either covered by this entry's amount, or saved as its own
+  // entry whose fare and date follow the first journey until they are changed.
+  // One fare is offered first: it never adds money to the claim by itself.
+  const [returning, setReturning] = useState(!!start.round_trip);
+  const [oneFare, setOneFare] = useState(true);
+  // Splitting an amount that covered both ways: the return fare must be typed.
+  const [wayBack, setWayBack] = useState<{ fare: string | null; date: string | null }>({
+    fare: start.round_trip ? "" : null,
+    date: null,
+  });
   const returnedId = useRef<string | undefined>(undefined);
   const tour = tourOf(v.tour_id);
   // A category from a newer version may be a journey: keep its From, To and By,
@@ -155,10 +161,14 @@ export function ExpenseForm({
       bill_no: v.bill_no.trim(),
       split_with: canSplit ? v.split_with : [],
       local_only: !v.tour_id && v.local_only,
+      round_trip: transport && returning && oneFare,
     };
+    if (start.round_trip && returning && !oneFare && !body.amount) {
+      throw new ApiError("Enter the fare for the way there.", "amount");
+    }
     // Checked before anything is saved, so a mistake here leaves nothing half done.
     let back: typeof body | undefined;
-    if (returning && transport) {
+    if (returning && transport && !oneFare) {
       const fare = amount("return_amount", returnFare);
       if (!fare) throw new ApiError("Enter the return fare.", "return_amount");
       if (returnDate < v.date) throw new ApiError("The return cannot be before the journey.", "return_date");
@@ -184,6 +194,12 @@ export function ExpenseForm({
         throw new ApiError(`The journey was saved, the return was not: ${reason}`, "return_amount");
       }
     }
+    // A return saved by an earlier try that is no longer wanted.
+    if (!back && returnedId.current) {
+      await api({ op: "delete", kind: "expense", id: returnedId.current });
+      returnedId.current = undefined;
+      await reload();
+    }
     // One at a time; each saved one leaves the list, so none is sent twice.
     for (let i = 0; i < pictures.length; i++) {
       await api({ op: "add_attachment", expense_id: savedId.current, data: pictures[i].data });
@@ -191,7 +207,7 @@ export function ExpenseForm({
     }
     if (pictures.length) await reload();
     if (keepQuick && !deviceOnly) {
-      const route = body.from && body.to ? `${body.from} → ${body.to}` : "";
+      const route = routeOf(body.from, body.to, body.round_trip);
       await save("quick", {
         label: route || body.description || "Quick entry",
         category: body.category,
@@ -200,6 +216,7 @@ export function ExpenseForm({
         mode: body.mode,
         amount: body.amount,
         claim: body.claim,
+        round_trip: body.round_trip,
       });
     }
     if (returnedId.current) notify(expense ? "Expense updated, return added" : "Journey and return added");
@@ -223,7 +240,13 @@ export function ExpenseForm({
         busy={form.busy}
         message={form.message}
         submitLabel={
-          returning && transport ? (expense ? "Save and add return" : "Add both journeys") : expense ? "Save changes" : "Add expense"
+          returning && transport && !oneFare
+            ? expense
+              ? "Save and add return"
+              : "Add both journeys"
+            : expense
+              ? "Save changes"
+              : "Add expense"
         }
         onDelete={onDelete}
       >
@@ -236,6 +259,8 @@ export function ExpenseForm({
               const q = data.quick.find((x) => x.id === id);
               if (!q) return;
               setPicked(true);
+              setReturning(!!q.round_trip);
+              setOneFare(true);
               form.setValues((current) => ({
                 ...current,
                 category: q.category,
@@ -303,20 +328,51 @@ export function ExpenseForm({
         {transport && (
           <>
             <Toggle
-              label="Add the return journey"
-              hint={[
-                v.from.trim() && v.to.trim()
-                  ? `A second entry, ${v.to.trim()} → ${v.from.trim()}.`
-                  : "A second entry, From and To the other way round, paid the same way.",
-                recorded && `That way back is already recorded on ${day(recorded.date)}.`,
-                returning && pictures.length > 0 && "Bill pictures stay with the first journey.",
-              ]
-                .filter(Boolean)
-                .join(" ")}
+              label="Return journey too"
+              hint="There and back"
               checked={returning}
               onChange={setReturning}
             />
             {returning && (
+              <>
+                <Segmented
+                  label="Fare"
+                  value={oneFare ? "one" : "two"}
+                  onChange={(x) => {
+                    setOneFare(x === "one");
+                    // That amount covered both ways. Keeping it and adding a
+                    // return would count the way back twice.
+                    if (start.round_trip) form.set("amount", x === "two" ? "" : moneyInput(start.amount ?? 0));
+                  }}
+                  options={[
+                    { value: "one", label: "One for both ways" },
+                    { value: "two", label: "Separate fares" },
+                  ]}
+                />
+                <p className="muted">
+                  {[
+                    oneFare
+                      ? `One entry: the amount above counts once${
+                          v.from.trim() && v.to.trim()
+                            ? `, listed as ${routeOf(v.from.trim(), v.to.trim(), true)}`
+                            : ""
+                        }.`
+                      : `A second entry, ${
+                          v.from.trim() && v.to.trim() ? routeOf(v.to.trim(), v.from.trim()) : "From and To the other way round"
+                        }, paid the same way.`,
+                    recorded &&
+                      (oneFare
+                        ? `A way back is already recorded on ${day(recorded.date)}: delete it if this fare covers both.`
+                        : `That way back is already recorded on ${day(recorded.date)}.`),
+                    !oneFare && start.round_trip && "The old amount covered both ways: enter the fare there above.",
+                    !oneFare && pictures.length > 0 && "Bill pictures stay with the first journey.",
+                  ]
+                    .filter(Boolean)
+                    .join(" ")}
+                </p>
+              </>
+            )}
+            {returning && !oneFare && (
               <div className="grid-2">
                 <Input
                   label={v.foreign ? `Return fare (${v.currency || "foreign"})` : "Return fare (₹)"}

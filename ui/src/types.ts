@@ -56,6 +56,8 @@ export interface QuickEntry {
   mode: string;
   amount: number;
   claim: Claim;
+  /** The amount covers the way back too. */
+  round_trip?: boolean;
 }
 
 export interface Summary {
@@ -108,9 +110,13 @@ export interface Tour {
   submitted_on: string;
   notes: string;
   local_only: boolean;
+  /** Expense ids in the order chosen for the report; empty means by date. */
+  order: string[];
   summary: Summary;
   claim_state: ClaimState;
   proof: Proof;
+  /** Its entries under the report's headings, in the order listed there. */
+  sections: { name: string; ids: string[] }[];
 }
 
 export interface Expense {
@@ -132,6 +138,8 @@ export interface Expense {
   bill_no: string;
   split_with: string[];
   local_only: boolean;
+  /** The one amount covers the way back too. Absent when it does not. */
+  round_trip?: boolean;
   /** `amount` in rupee paise. */
   home: number;
 }

@@ -1,6 +1,7 @@
 import { ArrowLeftRight, FileText, HandCoins, Pencil, Plus, ReceiptText } from "lucide-react";
 import { useState } from "react";
 import { today } from "../api";
+import { Arrange } from "../components/Arrange";
 import { CategoryBars, Meter } from "../components/charts";
 import { ProofCard } from "../components/ProofCard";
 import { Badge, Button, Card, EmptyState, List, ListRow, Money, PageHeader, Stat } from "../components/ui";
@@ -51,7 +52,7 @@ export function TourDetail({ id }: { id: string }) {
 
   const advance = async (to: TourStatus) => {
     try {
-      const { id: _id, summary: _summary, claim_state: _state, proof: _proof, ...body }: Tour = tour;
+      const { id: _id, summary: _summary, claim_state: _state, proof: _proof, sections: _sections, ...body }: Tour = tour;
       await save("tour", { ...body, status: to, submitted_on: to === "submitted" ? today() : body.submitted_on }, id);
       notify(`Marked ${TOUR_STATUS[to].toLowerCase()}`);
     } catch (error) {
@@ -128,7 +129,7 @@ export function TourDetail({ id }: { id: string }) {
       <QuickEntry key={id} tourId={id} />
 
       <div className="columns">
-        <Card title="Expenses">
+        <Card title="Expenses" action={<Arrange key={id} tour={tour} />}>
           {expenses.length ? (
             <List>
               {expenses.map((e) => (

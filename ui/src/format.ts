@@ -76,3 +76,7 @@ export function ago(ms: number, now = Date.now()): string {
 }
 
 export const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
+
+/** "A → B", or "A → B → A" when one fare covers the way back; empty without both ends. */
+export const routeOf = (from: string, to: string, roundTrip?: boolean) =>
+  from && to ? `${from} → ${to}${roundTrip ? ` → ${from}` : ""}` : "";
